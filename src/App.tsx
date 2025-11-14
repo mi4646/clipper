@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import MarkdownRenderer from "./MarkdownRenderer";
 
@@ -27,7 +27,19 @@ const mockGetCategories = (): Promise<string[]> => {
   return Promise.resolve(
     stored
       ? JSON.parse(stored)
-      : ["🤖📄 AI & Markdown 编辑器", "📊 AI 模型与评估", "🛠️💻 开发者项目"]
+      : [
+          "🤖📄 AI & Markdown 编辑器",
+          "📊 AI 模型与评估",
+          "🛠️💻 开发者项目",
+          "🖥️🧰 软件工具",
+          "🌐📝 网站资源",
+          "📰📅 周刊",
+          "👨‍💻🔧 编程与开发",
+          "⚡🔌 效率与插件",
+          "🎨🎬 设计与创意",
+          "🎵🎶 音乐与视频",
+          "🎮🎲 游戏与娱乐",
+        ]
   );
 };
 
@@ -41,6 +53,7 @@ const mockAddCategory = (name: string): Promise<void> => {
 };
 
 // --- 生成单个资源的 Markdown 片段 ---
+// **恢复原样，不再添加任何 HTML 标签**
 const generateMarkdownForResource = (resource: Resource): string => {
   return `### ${resource.title}\n- ${resource.summary} 🔗 [官网](${
     resource.website
@@ -52,12 +65,12 @@ const AppContent: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [newCategory, setNewCategory] = useState<string>("");
+  // **移除 resourceInput 的默认值**
   const [resourceInput, setResourceInput] = useState<Resource>({
-    title: "MarkFlowy", // 默认标题
-    summary:
-      "轻快纯粹的跨平台 Markdown 编辑器，内置 AI 辅助、实时预览、大纲视图和多标签笔记，适合写作与知识管理。", // 默认说明
-    website: "https://markflowy.vercel.app/", // 默认官网
-    github: "https://github.com/drl990114/MarkFlowy", // 默认 GitHub
+    title: "",
+    summary: "",
+    website: "",
+    github: "",
     category: "",
   });
   const [kbContent, setKbContent] = useState<string>(""); // 当前知识库内容 (raw markdown)
@@ -66,6 +79,15 @@ const AppContent: React.FC = () => {
 
   // 新增状态：控制是否打开全屏弹窗
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  // 使用 useRef 来获取预览区域的 DOM 引用
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  // **新增状态：控制自定义下拉菜单是否打开**
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // **新增状态：用于标记是否是初始化滚动**
+  const isInitialScrollRef = useRef(true);
 
   // 使用自定义 Hook
   const { success, error, dismiss } = useToast();
@@ -88,10 +110,14 @@ const AppContent: React.FC = () => {
         setCategories(categories);
 
         if (categories.length > 0) {
-          setSelectedCategory(categories[0]);
+          // **关键修改：设置默认选中分类**
+          const defaultCategory = categories[0];
+          setSelectedCategory(defaultCategory);
+          // **同时，更新 resourceInput 的 category 以确保初始渲染包含默认资源**
+          setResourceInput((prev) => ({ ...prev, category: defaultCategory }));
         }
-      } catch (error) {
-        console.error("初始化数据失败:", error);
+      } catch (err) {
+        console.error("初始化数据失败:", err);
         error("初始化数据失败，请检查控制台。"); // 使用封装的 error 函数
       } finally {
         // 关键修改：在所有异步操作完成后，设置 loading 为 false
@@ -102,6 +128,75 @@ const AppContent: React.FC = () => {
     initializeData();
   }, [error]); // 添加 error 作为依赖，确保函数引用稳定（通常 useToast 返回的函数引用是稳定的）
 
+  // **新增 useEffect：初始化完成后滚动到默认分类**
+  useEffect(() => {
+    if (
+      !loading &&
+      selectedCategory &&
+      previewContainerRef.current &&
+      isInitialScrollRef.current
+    ) {
+      // 等待DOM完全渲染后执行初始化滚动
+      const timer = setTimeout(() => {
+        // 查找默认分类的标题元素
+        const categoryHeader = `## ${selectedCategory}`;
+        const h2Elements = Array.from(
+          previewContainerRef.current!.querySelectorAll("h2")
+        );
+        const targetElement = h2Elements.find(
+          (el) => el.textContent?.trim() === selectedCategory
+        );
+
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          isInitialScrollRef.current = false; // 标记初始化滚动已完成
+        }
+      }, 100); // 给一点时间确保DOM渲染完成
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading, selectedCategory]);
+
+  // **修改 useEffect：当输入或分类变化时，尝试滚动到当前编辑的资源**
+  // **依赖于一个包含所有相关字段的对象**
+  useEffect(() => {
+    // **关键修改：滚动条件中必须包含 resourceInput.title 有值**
+    // 这样确保只有当用户开始输入标题（或保留默认标题）时，滚动才执行
+    // 这也解决了初始化时，如果 title 为空，则不滚动的问题
+    if (
+      resourceInput.title && // **确保标题有值才滚动**
+      resourceInput.summary &&
+      resourceInput.website &&
+      selectedCategory && // **确保分类已选择**
+      previewContainerRef.current &&
+      !isInitialScrollRef.current // **确保不是初始化滚动**
+    ) {
+      // 等待 DOM 更新完成后再执行滚动
+      // 使用 requestAnimationFrame 确保在浏览器下一次重绘之前执行
+      requestAnimationFrame(() => {
+        // 在预览容器内查找包含当前编辑标题的元素。
+        // 由于 Markdown 渲染器会把 ### 标题渲染成 <h3> 标签，我们查找其文本内容。
+        const h3Elements = Array.from(
+          previewContainerRef.current!.querySelectorAll("h3")
+        );
+        // 查找文本内容与当前输入标题匹配的 h3 元素
+        const targetElement = h3Elements.find(
+          (el) => el.textContent?.trim() === resourceInput.title
+        );
+
+        if (targetElement) {
+          // 找到目标元素后，将其滚动到视口中心
+          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          // 如果未找到（例如，如果标题为空或格式不匹配），则不滚动
+          // console.log("未找到当前编辑的标题元素，跳过滚动。");
+        }
+      });
+    }
+    // **修改：依赖项为一个对象，包含所有相关字段**
+    // 这样可以减少不必要的触发（相比监听每个字段），同时避免访问未初始化的 previewMarkdown
+  }, [resourceInput, selectedCategory]); // 依赖于包含所有相关字段的对象
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -109,8 +204,27 @@ const AppContent: React.FC = () => {
     setResourceInput((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCategory(e.target.value);
+  // **自定义下拉菜单的处理函数**
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    setResourceInput((prev) => ({ ...prev, category })); // 同步更新 resourceInput 中的 category
+    setIsDropdownOpen(false); // 选择后关闭下拉菜单
+
+    // 选择分类后滚动到该分类
+    if (previewContainerRef.current) {
+      requestAnimationFrame(() => {
+        const h2Elements = Array.from(
+          previewContainerRef.current!.querySelectorAll("h2")
+        );
+        const targetElement = h2Elements.find(
+          (el) => el.textContent?.trim() === category
+        );
+
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+    }
   };
 
   const handleAddResource = async () => {
@@ -159,17 +273,17 @@ const AppContent: React.FC = () => {
       updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
       await mockWriteKb(updatedContent);
       setKbContent(updatedContent);
-      success("资源已添加到知识库！"); // 使用封装的 success 函数
+      success("资源已添加到知识库！"); // 使用封装的 error 函数
 
       setResourceInput({
         title: "",
         summary: "",
         website: "",
         github: "",
-        category: "",
+        category: selectedCategory, // 保持当前选中的分类
       });
-    } catch (error) {
-      console.error("添加资源失败:", error);
+    } catch (err) {
+      console.error("添加资源失败:", err);
       error("添加资源失败，请检查控制台。"); // 使用封装的 error 函数
     }
   };
@@ -179,8 +293,10 @@ const AppContent: React.FC = () => {
       await mockAddCategory(newCategory.trim());
       setNewCategory("");
       await loadCategories(); // 重新加载分类以更新列表
-      setSelectedCategory(newCategory.trim());
-      success(`分类 "${newCategory.trim()}" 已添加！`); // 使用封装的 success 函数
+      const newCat = newCategory.trim();
+      setSelectedCategory(newCat);
+      setResourceInput((prev) => ({ ...prev, category: newCat })); // 同步更新 resourceInput 中的 category
+      success(`分类 "${newCat}" 已添加！`); // 使用封装的 success 函数
     }
   };
 
@@ -191,10 +307,12 @@ const AppContent: React.FC = () => {
       setCategories(cats);
       // 保持当前选中分类，如果它仍然存在
       if (cats.length > 0 && !cats.includes(selectedCategory)) {
-        setSelectedCategory(cats[0]);
+        const defaultCat = cats[0];
+        setSelectedCategory(defaultCat);
+        setResourceInput((prev) => ({ ...prev, category: defaultCat })); // 同步更新 resourceInput 中的 category
       }
-    } catch (error) {
-      console.error("加载分类失败:", error);
+    } catch (err) {
+      console.error("加载分类失败:", err);
       error("加载分类失败，请检查控制台。"); // 使用封装的 error 函数
     }
   };
@@ -204,8 +322,8 @@ const AppContent: React.FC = () => {
     try {
       alert("模拟同步到 GitHub！在 Tauri 版本中将调用 Git 命令。");
       success("已成功模拟同步到 GitHub! (请在 Tauri 版本中实现真实同步)"); // 使用封装的 success 函数
-    } catch (error) {
-      console.error("同步到 GitHub 失败:", error);
+    } catch (err) {
+      console.error("同步到 GitHub 失败:", err);
       error("同步到 GitHub 失败，请检查 Git 配置和网络。"); // 使用封装的 error 函数
     }
   };
@@ -245,22 +363,26 @@ const AppContent: React.FC = () => {
       return cleanContent;
     };
 
+    // **关键修改：只要用户在输入内容，就显示预览**
     if (
-      resourceInput.title &&
-      resourceInput.summary &&
-      resourceInput.website &&
-      selectedCategory
+      resourceInput.title ||
+      resourceInput.summary ||
+      resourceInput.website ||
+      resourceInput.github
     ) {
       // 获取最新的知识库内容
       let previewContent = getLatestKbContent();
 
-      const newResourceMarkdown = generateMarkdownForResource({
-        title: resourceInput.title,
-        summary: resourceInput.summary || "（待填写说明）",
+      // 使用占位符值来生成预览内容，即使字段为空
+      const previewResource = {
+        title: resourceInput.title || "(待填写标题)",
+        summary: resourceInput.summary || "(待填写说明)",
         website: resourceInput.website || "https://example.com",
-        github: resourceInput.github,
+        github: resourceInput.github || "",
         category: selectedCategory,
-      });
+      };
+
+      const newResourceMarkdown = generateMarkdownForResource(previewResource);
 
       const categoryHeader = `## ${selectedCategory}`;
 
@@ -293,6 +415,7 @@ const AppContent: React.FC = () => {
 
       return cleanPreviewContent;
     } else {
+      // 如果用户没有输入任何内容，显示原始知识库内容
       return getLatestKbContent();
     }
   }, [
@@ -329,7 +452,7 @@ const AppContent: React.FC = () => {
             </h2>
             <div className="space-y-5">
               <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-2">
+                <label className="block text-xs font-semibold text-gray-900 mb-2">
                   标题 * (必填)
                 </label>
                 <input
@@ -343,7 +466,7 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-2">
+                <label className="block text-xs font-semibold text-gray-900 mb-2">
                   说明 * (必填)
                 </label>
                 <textarea
@@ -358,7 +481,7 @@ const AppContent: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  <label className="block text-xs font-semibold text-gray-900 mb-2">
                     官网地址 * (必填)
                   </label>
                   <input
@@ -371,7 +494,7 @@ const AppContent: React.FC = () => {
                   />
                 </div>
                 <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-2"> 
+                  <label className="block text-xs font-semibold text-gray-900 mb-2">
                     GitHub 地址 (可选)
                   </label>
                   <input
@@ -386,27 +509,54 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-2">
+                <label className="block text-xs font-semibold text-gray-900 mb-2">
                   分类 * (必选)
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <select
-                    value={selectedCategory}
-                    onChange={handleCategoryChange}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
+                  {/* **替换为自定义下拉菜单** */}
+                  <div className="relative w-full">
+                    {/* **下拉触发器** */}
+                    <button
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white flex justify-between items-center"
+                    >
+                      <span>{selectedCategory || "请选择分类"}</span>
+                      <svg
+                        className={`fill-current h-4 w-4 transition-transform duration-200 ${
+                          isDropdownOpen ? "rotate-180" : ""
+                        }`}
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </button>
+
+                    {/* **下拉菜单内容** */}
+                    {isDropdownOpen && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {categories.map((cat) => (
+                          <div
+                            key={cat}
+                            onClick={() => handleCategorySelect(cat)}
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              selectedCategory === cat ? "bg-blue-100" : ""
+                            }`}
+                          >
+                            {cat}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* **新分类输入框和按钮** */}
+                  <div className="flex gap-2 w-full md:w-auto">
                     <input
                       type="text"
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-36"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="输入新分类名"
                     />
                     <button
@@ -456,7 +606,11 @@ const AppContent: React.FC = () => {
             </div>
 
             {/* 预览内容区域 - 占据剩余空间并启用滚动 */}
-            <div className="flex-1 border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-y-auto min-h-0">
+            {/* 修改：添加 ref */}
+            <div
+              ref={previewContainerRef}
+              className="flex-1 border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-y-auto min-h-0"
+            >
               {loading ? (
                 <div className="text-center text-gray-500 py-6">加载中...</div>
               ) : (
