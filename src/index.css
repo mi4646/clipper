@@ -22,3 +22,10 @@ pre {
 a {
   @apply text-blue-600 hover:text-blue-800 underline-offset-2 hover:underline;
 }
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: #007bff; /* 改变边框颜色 */
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25); /* 添加柔和阴影 */
+}

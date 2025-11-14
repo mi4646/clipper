@@ -329,7 +329,7 @@ const AppContent: React.FC = () => {
             </h2>
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">
                   标题 * (必填)
                 </label>
                 <input
@@ -343,7 +343,7 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">
                   说明 * (必填)
                 </label>
                 <textarea
@@ -358,7 +358,7 @@ const AppContent: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
                     官网地址 * (必填)
                   </label>
                   <input
@@ -371,7 +371,7 @@ const AppContent: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-gray-900 mb-2"> 
                     GitHub 地址 (可选)
                   </label>
                   <input
@@ -386,7 +386,7 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">
                   分类 * (必选)
                 </label>
                 <div className="flex flex-wrap gap-2">
