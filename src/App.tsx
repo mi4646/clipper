@@ -313,7 +313,7 @@ const AppContent: React.FC = () => {
             Clipper
           </h1>
           <p className="mt-1 text-sm text-gray-600 text-center">
-            Your Personal Resource Archive — Add Manually.
+            你的智能个人知识库 — 一键收藏，随时查阅 .
           </p>
         </div>
       </header>
@@ -426,19 +426,6 @@ const AppContent: React.FC = () => {
                 添加到知识库
               </button>
             </div>
-
-            {/* 移除旧的消息显示区域 */}
-            {/* {message && (
-              <div
-                className={`p-3 rounded-lg mt-4 text-xs ${
-                  message.includes("失败")
-                    ? "bg-red-100 text-red-800 border border-red-200"
-                    : "bg-green-100 text-green-800 border border-green-200"
-                }`}
-              >
-                {message}
-              </div>
-            )} */}
 
             <button
               onClick={handleSync}
