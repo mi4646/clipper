@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义全局样式 */
+body {
+  @apply bg-secondary text-primary;
+  font-family: "Inter", system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+/* 代码块样式 —— 像您写的 Markdown */
+code {
+  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
+}
+
+pre {
+  @apply bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto mt-4;
+}
+
+/* 链接样式 */
+a {
+  @apply text-blue-600 hover:text-blue-800 underline-offset-2 hover:underline;
+}
