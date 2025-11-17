@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import MarkdownRenderer from "./components/MarkdownRenderer";
 
@@ -72,21 +78,21 @@ const AppContent: React.FC = () => {
     category: "",
   });
   const [loading, setLoading] = useState<boolean>(true);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
   const isInitialScrollRef = useRef(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { success, error, dismiss } = useToast();
 
-  // --- 状态：GitHub 配置 (现在从 localStorage 读取) ---
-  // 移除了 useState 设置初始值，直接在需要时读取
-  // const [githubOwner, setGithubOwner] = useState<string>(() => localStorage.getItem("github_owner") || "");
-  // const [githubRepo, setGithubRepo] = useState<string>(() => localStorage.getItem("github_repo") || "");
-  // const [useRemoteContent, setUseRemoteContent] = useState<boolean>(() => localStorage.getItem("use_remote_content") === "true");
-
   const [loadingRemote, setLoadingRemote] = useState<boolean>(false);
   const [mainContent, setMainContent] = useState<string>(""); // 存储从本地或远程获取的主内容
+
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isTocOpen, setIsTocOpen] = useState(true); // 控制目录显示
+  const [tocItems, setTocItems] = useState<
+    { id: string; text: string; level: number }[]
+  >([]); // 目录项
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const tocRef = useRef<HTMLDivElement>(null);
 
   // --- 新增函数：从 GitHub 获取 README.md (需要 Token 访问私有仓库，并正确处理中文) ---
   const fetchReadmeFromGithub = async (
@@ -449,12 +455,41 @@ const AppContent: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // 检查URL参数来初始化全屏状态
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldOpenFullscreen = urlParams.get("fullscreen") === "true";
+    if (shouldOpenFullscreen) {
+      setIsPreviewModalOpen(true);
+    }
+  }, []);
+
+  // 修改打开全屏预览的函数
   const openFullscreenModal = () => {
     setIsPreviewModalOpen(true);
+    // 更新URL参数
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set("fullscreen", "true");
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}?${urlParams.toString()}`
+    );
   };
 
+  // 修改关闭全屏预览的函数
   const closeFullscreenModal = () => {
     setIsPreviewModalOpen(false);
+    // 移除URL参数
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.delete("fullscreen");
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}${
+        urlParams.toString() ? "?" + urlParams.toString() : ""
+      }`
+    );
   };
 
   // --- 修改：previewMarkdown 基于 mainContent 计算 ---
@@ -516,9 +551,51 @@ const AppContent: React.FC = () => {
   const currentUseRemoteContent =
     localStorage.getItem("use_remote_content") === "true";
 
+  // 添加生成目录
+  const generateToc = useCallback(() => {
+    if (!previewContainerRef.current) return;
+
+    const headings = previewContainerRef.current.querySelectorAll(
+      "h1, h2, h3, h4, h5, h6"
+    );
+    const items = Array.from(headings).map((heading) => {
+      const text = heading.textContent || "";
+      const id = text
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^\w-]/g, "");
+      heading.id = id;
+      return { id, text, level: parseInt(heading.tagName.charAt(1)) };
+    });
+
+    setTocItems(items);
+  }, [previewMarkdown]);
+
+  // 添加滚动到标题
+  const scrollToHeading = (id: string) => {
+    const element = document.getElementById(id);
+    if (element && previewContainerRef.current) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      element.classList.add("bg-yellow-100");
+      setTimeout(() => {
+        element.classList.remove("bg-yellow-100");
+      }, 1500);
+    }
+  };
+
+  // 在预览内容更新后生成目录（保持不变）
+  useEffect(() => {
+    if (isPreviewModalOpen) {
+      const timer = setTimeout(() => {
+        generateToc();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isPreviewModalOpen, previewMarkdown, generateToc]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900">
-      {/* Header - 减少高度 */}
       <header className="py-3 px-6 border-b border-gray-200 bg-white">
         <div className="max-w-[85vw] mx-auto">
           <h1 className="text-2xl font-bold tracking-tight text-gray-800 text-center">
@@ -731,31 +808,113 @@ const AppContent: React.FC = () => {
 
       {/* 模态框 */}
       {isPreviewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-800">全屏预览</h3>
+        <div className="fixed inset-0 z-50 flex bg-black bg-opacity-50">
+          {/* 主容器 - 使用相对定位 */}
+          <div className="flex flex-col w-full h-full relative">
+            {/* 顶部控制栏 */}
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white shadow-sm z-10">
+              <div className="flex items-center space-x-4">
+                {/* 优化后的目录切换按钮 - 精确对齐 */}
+                <button
+                  onClick={() => setIsTocOpen(!isTocOpen)}
+                  className="text-gray-700 hover:text-blue-600 w-10 h-10 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center"
+                  title={isTocOpen ? "隐藏目录" : "显示目录"}
+                >
+                  <svg
+                    className={`w-5 h-5 transition-transform duration-300 ${
+                      isTocOpen ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
+                  </svg>
+                </button>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  全屏预览
+                </h3>
+              </div>
               <button
                 onClick={closeFullscreenModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold p-1 rounded-full hover:bg-gray-100 transition-colors"
               >
                 ×
               </button>
             </div>
-            <div className="flex-1 p-6 overflow-y-auto">
-              {/* --- 修改模态框渲染逻辑 --- */}
-              {loading || loadingRemote ? (
-                <div className="text-center text-gray-500">
-                  正在加载远程内容...
+
+            {/* 中间内容区域 - 使用相对定位 */}
+            <div className="flex-1 overflow-hidden relative">
+              {/* 内容区域 */}
+              <div
+                ref={previewContainerRef}
+                className={`h-full overflow-y-auto bg-gray-50 ${
+                  isTocOpen ? "w-[calc(100%-20rem)]" : "w-full"
+                } absolute left-0 top-0`}
+              >
+                <div className="p-6">
+                  {loading || loadingRemote ? (
+                    <div className="text-center text-gray-500 py-6">
+                      正在加载远程内容...
+                    </div>
+                  ) : (
+                    <MarkdownRenderer>{previewMarkdown}</MarkdownRenderer>
+                  )}
                 </div>
-              ) : (
-                <MarkdownRenderer>{previewMarkdown}</MarkdownRenderer>
+              </div>
+
+              {/* 右侧目录区域 - 使用绝对定位 */}
+              {isTocOpen && (
+                <div
+                  ref={tocRef}
+                  className="absolute right-0 top-0 h-full w-80 bg-white border-l border-gray-200 overflow-y-auto shadow-lg z-0"
+                >
+                  {/* 目录标题 */}
+                  <div className="p-4 border-b border-gray-200 bg-gray-50">
+                    <h4 className="font-bold text-gray-800">目录</h4>
+                  </div>
+
+                  {/* 目录内容 */}
+                  <div className="p-2">
+                    {tocItems.length > 0 ? (
+                      <ul className="space-y-1">
+                        {tocItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className={`py-1.5 px-3 rounded cursor-pointer hover:bg-blue-50 transition-colors ${
+                              item.level === 1
+                                ? "pl-3 font-bold text-gray-800"
+                                : item.level === 2
+                                ? "pl-5 text-gray-700"
+                                : item.level === 3
+                                ? "pl-7 text-gray-600"
+                                : "pl-9 text-gray-500"
+                            }`}
+                            onClick={() => scrollToHeading(item.id)}
+                          >
+                            {item.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-gray-400 text-sm p-3">暂无目录项</p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
-            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+
+            {/* 底部操作栏 */}
+            <div className="p-4 border-t border-gray-200 bg-white z-10">
               <button
                 onClick={handleDownload}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
               >
                 下载 .md
               </button>
