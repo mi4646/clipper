@@ -83,10 +83,13 @@ const AppContent: React.FC = () => {
   // 使用 useRef 来获取预览区域的 DOM 引用
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
-  // **新增状态：控制自定义下拉菜单是否打开**
+  // 新增：控制自定义下拉菜单是否打开
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // **新增状态：用于标记是否是初始化滚动**
+  // 新增：用于引用下拉菜单的 DOM 元素
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 新增：用于标记是否是初始化滚动
   const isInitialScrollRef = useRef(true);
 
   // 使用自定义 Hook
@@ -427,6 +430,30 @@ const AppContent: React.FC = () => {
     selectedCategory,
   ]);
 
+  // 新增: 监听外部点击以关闭下拉菜单
+  useEffect(() => {
+    // 定义点击处理函数
+    const handleClickOutside = (event: MouseEvent) => {
+      // 如果 dropdownRef.current 存在（组件已挂载）
+      // 并且点击的目标不在 dropdownRef 所引用的元素内部
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        // 关闭下拉菜单
+        setIsDropdownOpen(false);
+      }
+    };
+
+    // 组件挂载后，添加事件监听器
+    document.addEventListener("mousedown", handleClickOutside);
+
+    // 返回清理函数，在组件卸载前移除事件监听器
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []); // 空依赖数组，意味着这个 effect 只在组件挂载和卸载时运行一次
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900">
       {/* Header - 减少高度 */}
@@ -509,12 +536,16 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
+                {" "}
+                {/* 这个是包裹 label 的 div */}
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   分类 * (必选)
                 </label>
                 <div className="flex space-x-2">
-                  {/* **自定义下拉菜单** */}
-                  <div className="relative w-64 max-w-full">
+                  {/* **自定义下拉菜单 - 添加 ref** */}
+                  <div ref={dropdownRef} className="relative w-64 max-w-full">
+                    {" "}
+                    {/* 添加 ref={dropdownRef} */}
                     <button
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white flex justify-between items-center"
@@ -530,13 +561,12 @@ const AppContent: React.FC = () => {
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                       </svg>
                     </button>
-
                     {isDropdownOpen && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {categories.map((cat) => (
                           <div
                             key={cat}
-                            onClick={() => handleCategorySelect(cat)}
+                            onClick={() => handleCategorySelect(cat)} // 这个点击会自动关闭菜单，因为 handleCategorySelect 里调用了 setIsDropdownOpen(false)
                             className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
                               selectedCategory === cat ? "bg-blue-100" : ""
                             }`}
@@ -547,7 +577,6 @@ const AppContent: React.FC = () => {
                       </div>
                     )}
                   </div>
-
                   {/* **新分类输入框 + 附加按钮** */}
                   <div className="flex-1 flex">
                     <input
