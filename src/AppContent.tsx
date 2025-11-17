@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { ToastProvider, useToast } from "./components/ToastProvider";
-import MarkdownRenderer from "./MarkdownRenderer";
+import MarkdownRenderer from "./components/MarkdownRenderer";
 
 // --- 类型定义 ---
 interface Resource {

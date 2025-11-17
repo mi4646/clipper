@@ -1,7 +1,7 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import "./typora-style.css";
+import "../assets/css/typora-style.css";
 
 interface MarkdownRendererProps {
   children: string; // Markdown 内容
