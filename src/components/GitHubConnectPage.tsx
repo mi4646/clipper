@@ -3,19 +3,35 @@ import React, { useState } from "react";
 import { SiGithub } from "react-icons/si"; // 导入 Simple Icons 的 GitHub 图标
 
 interface GitHubConnectPageProps {
-  onConnect: (token: string) => void;
+  // onConnect 回调函数现在接收 token, owner, repo 三个参数
+  onConnect: (token: string, owner: string, repo: string) => void;
 }
 
 const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
   const [token, setToken] = useState<string>("");
+  // 新增状态：存储用户名和仓库名
+  const [owner, setOwner] = useState<string>("");
+  const [repo, setRepo] = useState<string>("");
 
   const handleConnect = () => {
     if (!token.trim()) {
       alert("请先输入您的 GitHub Personal Access Token。");
       return;
     }
+    if (!owner.trim()) {
+      alert("请先输入 GitHub 用户名。");
+      return;
+    }
+    if (!repo.trim()) {
+      alert("请先输入仓库名。");
+      return;
+    }
+    // 将 Token, Owner, Repo 都保存到 localStorage
     localStorage.setItem("github_token", token);
-    onConnect(token);
+    localStorage.setItem("github_owner", owner);
+    localStorage.setItem("github_repo", repo);
+    // 通知父组件连接成功，并传递所有配置信息
+    onConnect(token, owner, repo);
   };
 
   const handleCreateTokenClick = () => {
@@ -37,9 +53,10 @@ const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
           连接 GitHub
         </h1>
         <p className="text-sm text-center text-gray-600 mb-6">
-          输入您的 GitHub 个人访问令牌以开始使用
+          输入您的 GitHub 个人访问令牌和仓库信息以开始使用
         </p>
 
+        {/* Token 输入 */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             GitHub Personal Access Token
@@ -49,6 +66,34 @@ const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          />
+        </div>
+
+        {/* 用户名输入 */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            GitHub 用户名
+          </label>
+          <input
+            type="text"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            placeholder="your-github-username"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          />
+        </div>
+
+        {/* 仓库名输入 */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            仓库名
+          </label>
+          <input
+            type="text"
+            value={repo}
+            onChange={(e) => setRepo(e.target.value)}
+            placeholder="your-repo-name"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
         </div>

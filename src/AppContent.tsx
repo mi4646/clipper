@@ -79,16 +79,12 @@ const AppContent: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { success, error, dismiss } = useToast();
 
-  // --- 新增状态：GitHub 配置 ---
-  const [githubOwner, setGithubOwner] = useState<string>(
-    () => localStorage.getItem("github_owner") || ""
-  );
-  const [githubRepo, setGithubRepo] = useState<string>(
-    () => localStorage.getItem("github_repo") || ""
-  );
-  const [useRemoteContent, setUseRemoteContent] = useState<boolean>(
-    () => localStorage.getItem("use_remote_content") === "true"
-  );
+  // --- 状态：GitHub 配置 (现在从 localStorage 读取) ---
+  // 移除了 useState 设置初始值，直接在需要时读取
+  // const [githubOwner, setGithubOwner] = useState<string>(() => localStorage.getItem("github_owner") || "");
+  // const [githubRepo, setGithubRepo] = useState<string>(() => localStorage.getItem("github_repo") || "");
+  // const [useRemoteContent, setUseRemoteContent] = useState<boolean>(() => localStorage.getItem("use_remote_content") === "true");
+
   const [loadingRemote, setLoadingRemote] = useState<boolean>(false);
   const [mainContent, setMainContent] = useState<string>(""); // 存储从本地或远程获取的主内容
 
@@ -101,8 +97,11 @@ const AppContent: React.FC = () => {
       throw new Error("GitHub owner 和 repo 不能为空");
     }
 
-    // 从 Vite 环境变量获取 Token
-    const token = import.meta.env.VITE_GITHUB_TOKEN;
+    // 从 localStorage 获取 Token
+    const token = localStorage.getItem("github_token");
+    if (!token) {
+      throw new Error("GitHub Token 未设置，请先连接 GitHub。");
+    }
 
     // 构建 API URL
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/README.md`;
@@ -112,10 +111,8 @@ const AppContent: React.FC = () => {
       Accept: "application/vnd.github.v3+json", // GitHub API v3
     };
 
-    // 如果 Token 存在，则添加 Authorization 头
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    // 添加 Authorization 头
+    headers["Authorization"] = `Bearer ${token}`;
 
     // 发送请求
     const response = await fetch(apiUrl, {
@@ -194,10 +191,14 @@ const AppContent: React.FC = () => {
       if (loading) return; // 等待初始化完成
       setLoadingRemote(true);
       try {
+        // 直接从 localStorage 读取配置
+        const savedOwner = localStorage.getItem("github_owner") || "";
+        const savedRepo = localStorage.getItem("github_repo") || "";
+
         let content = "";
-        if (useRemoteContent && githubOwner && githubRepo) {
+        if (savedOwner && savedRepo) {
           console.log("正在从 GitHub 获取内容...");
-          content = await fetchReadmeFromGithub(githubOwner, githubRepo);
+          content = await fetchReadmeFromGithub(savedOwner, savedRepo);
         } else {
           console.log("正在从本地获取内容...");
           const stored = localStorage.getItem("clipper_kb_content");
@@ -224,7 +225,7 @@ const AppContent: React.FC = () => {
     };
 
     loadMainContent();
-  }, [loading, useRemoteContent, githubOwner, githubRepo, error]);
+  }, [loading, error]); // 移除了 githubOwner, githubRepo, useRemoteContent
 
   // --- 新增 useEffect：处理外部点击关闭下拉菜单 ---
   useEffect(() => {
@@ -377,10 +378,8 @@ const AppContent: React.FC = () => {
 
       updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
 
-      if (!useRemoteContent) {
-        // 如果当前使用本地内容，才写入 localStorage
-        await mockWriteKb(updatedContent);
-      }
+      // 从 localStorage 读取 useRemoteContent 设置
+      await mockWriteKb(updatedContent);
       // 无论是否使用远程内容，都更新 mainContent 状态以刷新预览
       setMainContent(updatedContent);
       success("资源已添加到知识库！");
@@ -513,6 +512,10 @@ const AppContent: React.FC = () => {
     return baseContent;
   }, [mainContent, loading, loadingRemote, resourceInput, selectedCategory]);
 
+  // 从 localStorage 读取当前的 useRemoteContent 设置，用于 UI 显示
+  const currentUseRemoteContent =
+    localStorage.getItem("use_remote_content") === "true";
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900">
       {/* Header - 减少高度 */}
@@ -524,6 +527,13 @@ const AppContent: React.FC = () => {
           <p className="mt-1 text-sm text-gray-600 text-center">
             你的智能个人知识库 — 一键收藏，随时查阅 .
           </p>
+          {/* --- 新增：显示当前连接的仓库信息 --- */}
+          {currentUseRemoteContent && (
+            <div className="mt-1 text-xs text-gray-500 text-center">
+              当前连接: {localStorage.getItem("github_owner")}/
+              {localStorage.getItem("github_repo")}
+            </div>
+          )}
         </div>
       </header>
 
@@ -669,85 +679,9 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
 
-              {/* --- 新增：GitHub 配置 UI --- */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-center space-x-2 mb-2">
-                  <input
-                    type="checkbox"
-                    id="useRemoteToggle"
-                    checked={useRemoteContent}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setUseRemoteContent(checked);
-                      localStorage.setItem(
-                        "use_remote_content",
-                        checked.toString()
-                      );
-                    }}
-                  />
-                  <label
-                    htmlFor="useRemoteToggle"
-                    className="text-sm font-medium text-gray-700"
-                  >
-                    使用 GitHub 远程内容
-                  </label>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    value={githubOwner}
-                    onChange={(e) => setGithubOwner(e.target.value)}
-                    onBlur={(e) =>
-                      localStorage.setItem("github_owner", e.target.value)
-                    }
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="GitHub 用户名"
-                  />
-                  <input
-                    type="text"
-                    value={githubRepo}
-                    onChange={(e) => setGithubRepo(e.target.value)}
-                    onBlur={(e) =>
-                      localStorage.setItem("github_repo", e.target.value)
-                    }
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="仓库名"
-                  />
-                </div>
-                <button
-                  onClick={() => {
-                    const loadMainContent = async () => {
-                      if (useRemoteContent && githubOwner && githubRepo) {
-                        setLoadingRemote(true);
-                        try {
-                          const content = await fetchReadmeFromGithub(
-                            githubOwner,
-                            githubRepo
-                          );
-                          setMainContent(content);
-                          success("成功刷新 GitHub 内容！");
-                        } catch (err) {
-                          console.error("刷新失败:", err);
-                          error(`刷新失败: ${(err as Error).message}`);
-                        } finally {
-                          setLoadingRemote(false);
-                        }
-                      }
-                    };
-                    loadMainContent();
-                  }}
-                  disabled={
-                    loadingRemote ||
-                    !useRemoteContent ||
-                    !githubOwner ||
-                    !githubRepo
-                  }
-                  className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  刷新 GitHub 内容
-                </button>
-              </div>
-              {/* --- End 新增 --- */}
+              {/* --- 移除：GitHub 配置 UI --- */}
+              {/* 原来的 GitHub 配置部分已完全删除 */}
+              {/* --- End 移除 --- */}
             </div>
           </div>
 
@@ -756,18 +690,6 @@ const AppContent: React.FC = () => {
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-xl font-semibold text-gray-800">实时预览</h2>
               <div className="flex space-x-2">
-                <button
-                  onClick={handleAddResource}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
-                >
-                  添加到知识库
-                </button>
-                <button
-                  onClick={handleSync}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
-                >
-                  同步到 GitHub
-                </button>
                 <button
                   onClick={openFullscreenModal}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
