@@ -53,7 +53,6 @@ const mockAddCategory = (name: string): Promise<void> => {
 };
 
 // --- 生成单个资源的 Markdown 片段 ---
-// **恢复原样，不再添加任何 HTML 标签**
 const generateMarkdownForResource = (resource: Resource): string => {
   return `### ${resource.title}\n- ${resource.summary} 🔗 [官网](${
     resource.website
@@ -65,7 +64,6 @@ const AppContent: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [newCategory, setNewCategory] = useState<string>("");
-  // **移除 resourceInput 的默认值**
   const [resourceInput, setResourceInput] = useState<Resource>({
     title: "",
     summary: "",
@@ -73,33 +71,95 @@ const AppContent: React.FC = () => {
     github: "",
     category: "",
   });
-  const [kbContent, setKbContent] = useState<string>(""); // 当前知识库内容 (raw markdown)
-  // 新增状态：控制是否正在加载数据
   const [loading, setLoading] = useState<boolean>(true);
-
-  // 新增状态：控制是否打开全屏弹窗
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-
-  // 使用 useRef 来获取预览区域的 DOM 引用
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-
-  // 新增：控制自定义下拉菜单是否打开
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  // 新增：用于引用下拉菜单的 DOM 元素
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // 新增：用于标记是否是初始化滚动
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const isInitialScrollRef = useRef(true);
-
-  // 使用自定义 Hook
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { success, error, dismiss } = useToast();
 
+  // --- 新增状态：GitHub 配置 ---
+  const [githubOwner, setGithubOwner] = useState<string>(
+    () => localStorage.getItem("github_owner") || ""
+  );
+  const [githubRepo, setGithubRepo] = useState<string>(
+    () => localStorage.getItem("github_repo") || ""
+  );
+  const [useRemoteContent, setUseRemoteContent] = useState<boolean>(
+    () => localStorage.getItem("use_remote_content") === "true"
+  );
+  const [loadingRemote, setLoadingRemote] = useState<boolean>(false);
+  const [mainContent, setMainContent] = useState<string>(""); // 存储从本地或远程获取的主内容
+
+  // --- 新增函数：从 GitHub 获取 README.md (需要 Token 访问私有仓库，并正确处理中文) ---
+  const fetchReadmeFromGithub = async (
+    owner: string,
+    repo: string
+  ): Promise<string> => {
+    if (!owner || !repo) {
+      throw new Error("GitHub owner 和 repo 不能为空");
+    }
+
+    // 从 Vite 环境变量获取 Token
+    const token = import.meta.env.VITE_GITHUB_TOKEN;
+
+    // 构建 API URL
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/README.md`;
+
+    // 构建请求头
+    const headers: HeadersInit = {
+      Accept: "application/vnd.github.v3+json", // GitHub API v3
+    };
+
+    // 如果 Token 存在，则添加 Authorization 头
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    // 发送请求
+    const response = await fetch(apiUrl, {
+      headers,
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`在仓库 ${owner}/${repo} 中未找到 README.md 文件。`);
+      } else if (response.status === 401) {
+        throw new Error(`访问被拒绝，Token 可能无效或权限不足。`);
+      } else if (response.status === 403) {
+        throw new Error(`API 速率限制已达到或 Token 权限不足。`);
+      } else {
+        throw new Error(
+          `获取 README.md 失败: ${response.status} ${response.statusText}`
+        );
+      }
+    }
+
+    const data = await response.json();
+    // GitHub API 返回的内容是 base64 编码的
+    const base64Content = data.content;
+
+    // --- 正确解码 Base64 并处理 UTF-8 内容 ---
+    // 1. 将 Base64 字符串解码为字节数组 (Uint8Array)
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // 2. 使用 TextDecoder 将字节数组解码为 UTF-8 字符串
+    const decoder = new TextDecoder("utf-8");
+    const content = decoder.decode(bytes);
+    // --- End 修改 ---
+
+    return content;
+  };
+
+  // --- useEffect：初始化加载数据 ---
   useEffect(() => {
-    // 使用立即执行的异步函数来处理异步操作
     const initializeData = async () => {
       try {
-        // 同时加载知识库和分类
         const [kbContent, categories] = await Promise.all([
           mockReadKb(),
           mockGetCategories(),
@@ -109,40 +169,90 @@ const AppContent: React.FC = () => {
         if (!cleanKbContent.startsWith("# 知识库")) {
           cleanKbContent = "# 知识库\n\n" + cleanKbContent;
         }
-        setKbContent(cleanKbContent);
+        // setKbContent(cleanKbContent); // 不再需要原始 kbContent，用 mainContent 替代
         setCategories(categories);
 
         if (categories.length > 0) {
-          // **关键修改：设置默认选中分类**
           const defaultCategory = categories[0];
           setSelectedCategory(defaultCategory);
-          // **同时，更新 resourceInput 的 category 以确保初始渲染包含默认资源**
           setResourceInput((prev) => ({ ...prev, category: defaultCategory }));
         }
       } catch (err) {
         console.error("初始化数据失败:", err);
-        error("初始化数据失败，请检查控制台。"); // 使用封装的 error 函数
+        error("初始化数据失败，请检查控制台。");
       } finally {
-        // 关键修改：在所有异步操作完成后，设置 loading 为 false
         setLoading(false);
       }
     };
 
     initializeData();
-  }, [error]); // 添加 error 作为依赖，确保函数引用稳定（通常 useToast 返回的函数引用是稳定的）
+  }, [error]);
 
-  // **新增 useEffect：初始化完成后滚动到默认分类**
+  // --- 新增 useEffect：根据设置加载主内容 (本地或远程) ---
+  useEffect(() => {
+    const loadMainContent = async () => {
+      if (loading) return; // 等待初始化完成
+      setLoadingRemote(true);
+      try {
+        let content = "";
+        if (useRemoteContent && githubOwner && githubRepo) {
+          console.log("正在从 GitHub 获取内容...");
+          content = await fetchReadmeFromGithub(githubOwner, githubRepo);
+        } else {
+          console.log("正在从本地获取内容...");
+          const stored = localStorage.getItem("clipper_kb_content");
+          let cleanContent = (stored || "").trim();
+          if (!cleanContent.startsWith("# 知识库")) {
+            cleanContent = "# 知识库\n\n" + cleanContent;
+          }
+          content = cleanContent;
+        }
+        setMainContent(content);
+      } catch (err) {
+        console.error("获取主内容失败:", err);
+        error(`获取主内容失败: ${(err as Error).message}`);
+        // 回退到本地内容
+        const stored = localStorage.getItem("clipper_kb_content");
+        let cleanContent = (stored || "").trim();
+        if (!cleanContent.startsWith("# 知识库")) {
+          cleanContent = "# 知识库\n\n" + cleanContent;
+        }
+        setMainContent(cleanContent);
+      } finally {
+        setLoadingRemote(false);
+      }
+    };
+
+    loadMainContent();
+  }, [loading, useRemoteContent, githubOwner, githubRepo, error]);
+
+  // --- 新增 useEffect：处理外部点击关闭下拉菜单 ---
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // --- useEffect：初始化滚动 ---
   useEffect(() => {
     if (
       !loading &&
+      !loadingRemote &&
       selectedCategory &&
       previewContainerRef.current &&
       isInitialScrollRef.current
     ) {
-      // 等待DOM完全渲染后执行初始化滚动
       const timer = setTimeout(() => {
-        // 查找默认分类的标题元素
-        const categoryHeader = `## ${selectedCategory}`;
         const h2Elements = Array.from(
           previewContainerRef.current!.querySelectorAll("h2")
         );
@@ -151,54 +261,45 @@ const AppContent: React.FC = () => {
         );
 
         if (targetElement) {
-          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
-          isInitialScrollRef.current = false; // 标记初始化滚动已完成
+          targetElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          isInitialScrollRef.current = false;
         }
-      }, 100); // 给一点时间确保DOM渲染完成
+      }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [loading, selectedCategory]);
+  }, [loading, loadingRemote, selectedCategory]);
 
-  // **修改 useEffect：当输入或分类变化时，尝试滚动到当前编辑的资源**
-  // **依赖于一个包含所有相关字段的对象**
+  // --- useEffect：输入变化时滚动 ---
   useEffect(() => {
-    // **关键修改：滚动条件中必须包含 resourceInput.title 有值**
-    // 这样确保只有当用户开始输入标题（或保留默认标题）时，滚动才执行
-    // 这也解决了初始化时，如果 title 为空，则不滚动的问题
     if (
-      resourceInput.title && // **确保标题有值才滚动**
+      resourceInput.title &&
       resourceInput.summary &&
       resourceInput.website &&
-      selectedCategory && // **确保分类已选择**
+      selectedCategory &&
       previewContainerRef.current &&
-      !isInitialScrollRef.current // **确保不是初始化滚动**
+      !isInitialScrollRef.current
     ) {
-      // 等待 DOM 更新完成后再执行滚动
-      // 使用 requestAnimationFrame 确保在浏览器下一次重绘之前执行
       requestAnimationFrame(() => {
-        // 在预览容器内查找包含当前编辑标题的元素。
-        // 由于 Markdown 渲染器会把 ### 标题渲染成 <h3> 标签，我们查找其文本内容。
         const h3Elements = Array.from(
           previewContainerRef.current!.querySelectorAll("h3")
         );
-        // 查找文本内容与当前输入标题匹配的 h3 元素
         const targetElement = h3Elements.find(
           (el) => el.textContent?.trim() === resourceInput.title
         );
 
         if (targetElement) {
-          // 找到目标元素后，将其滚动到视口中心
-          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
-        } else {
-          // 如果未找到（例如，如果标题为空或格式不匹配），则不滚动
-          // console.log("未找到当前编辑的标题元素，跳过滚动。");
+          targetElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       });
     }
-    // **修改：依赖项为一个对象，包含所有相关字段**
-    // 这样可以减少不必要的触发（相比监听每个字段），同时避免访问未初始化的 previewMarkdown
-  }, [resourceInput, selectedCategory]); // 依赖于包含所有相关字段的对象
+  }, [resourceInput, selectedCategory]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -207,13 +308,11 @@ const AppContent: React.FC = () => {
     setResourceInput((prev) => ({ ...prev, [name]: value }));
   };
 
-  // **自定义下拉菜单的处理函数**
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
-    setResourceInput((prev) => ({ ...prev, category })); // 同步更新 resourceInput 中的 category
-    setIsDropdownOpen(false); // 选择后关闭下拉菜单
+    setResourceInput((prev) => ({ ...prev, category }));
+    setIsDropdownOpen(false);
 
-    // 选择分类后滚动到该分类
     if (previewContainerRef.current) {
       requestAnimationFrame(() => {
         const h2Elements = Array.from(
@@ -224,14 +323,17 @@ const AppContent: React.FC = () => {
         );
 
         if (targetElement) {
-          targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          targetElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       });
     }
   };
 
   const handleAddResource = async () => {
-    dismiss(); // 清除之前的 toast 消息（可选，防止堆积）
+    dismiss();
 
     if (
       !resourceInput.title ||
@@ -239,7 +341,7 @@ const AppContent: React.FC = () => {
       !resourceInput.website ||
       !selectedCategory
     ) {
-      error("请填写所有必填项（标题、说明、官网、分类）。"); // 使用封装的 error 函数
+      error("请填写所有必填项（标题、说明、官网、分类）。");
       return;
     }
 
@@ -249,9 +351,9 @@ const AppContent: React.FC = () => {
         category: selectedCategory,
       });
 
-      const currentKb = await mockReadKb();
+      // 使用 mainContent 作为基础进行更新
+      let updatedContent = mainContent;
       const categoryHeader = `## ${selectedCategory}`;
-      let updatedContent = currentKb;
 
       if (!updatedContent.includes(categoryHeader)) {
         updatedContent += `\n\n${categoryHeader}\n\n${newResourceMarkdown}`;
@@ -274,20 +376,25 @@ const AppContent: React.FC = () => {
       }
 
       updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
-      await mockWriteKb(updatedContent);
-      setKbContent(updatedContent);
-      success("资源已添加到知识库！"); // 使用封装的 error 函数
+
+      if (!useRemoteContent) {
+        // 如果当前使用本地内容，才写入 localStorage
+        await mockWriteKb(updatedContent);
+      }
+      // 无论是否使用远程内容，都更新 mainContent 状态以刷新预览
+      setMainContent(updatedContent);
+      success("资源已添加到知识库！");
 
       setResourceInput({
         title: "",
         summary: "",
         website: "",
         github: "",
-        category: selectedCategory, // 保持当前选中的分类
+        category: selectedCategory,
       });
     } catch (err) {
       console.error("添加资源失败:", err);
-      error("添加资源失败，请检查控制台。"); // 使用封装的 error 函数
+      error("添加资源失败，请检查控制台。");
     }
   };
 
@@ -295,44 +402,44 @@ const AppContent: React.FC = () => {
     if (newCategory.trim()) {
       await mockAddCategory(newCategory.trim());
       setNewCategory("");
-      await loadCategories(); // 重新加载分类以更新列表
+      await loadCategories();
       const newCat = newCategory.trim();
       setSelectedCategory(newCat);
-      setResourceInput((prev) => ({ ...prev, category: newCat })); // 同步更新 resourceInput 中的 category
-      success(`分类 "${newCat}" 已添加！`); // 使用封装的 success 函数
+      setResourceInput((prev) => ({ ...prev, category: newCat }));
+      success(`分类 "${newCat}" 已添加！`);
     }
   };
 
-  // 将加载分类的逻辑提取为一个函数，方便复用
   const loadCategories = async () => {
     try {
       const cats = await mockGetCategories();
       setCategories(cats);
-      // 保持当前选中分类，如果它仍然存在
       if (cats.length > 0 && !cats.includes(selectedCategory)) {
         const defaultCat = cats[0];
         setSelectedCategory(defaultCat);
-        setResourceInput((prev) => ({ ...prev, category: defaultCat })); // 同步更新 resourceInput 中的 category
+        setResourceInput((prev) => ({ ...prev, category: defaultCat }));
       }
     } catch (err) {
       console.error("加载分类失败:", err);
-      error("加载分类失败，请检查控制台。"); // 使用封装的 error 函数
+      error("加载分类失败，请检查控制台。");
     }
   };
 
   const handleSync = async () => {
-    dismiss(); // 清除之前的 toast 消息（可选）
+    dismiss();
     try {
       alert("模拟同步到 GitHub！在 Tauri 版本中将调用 Git 命令。");
-      success("已成功模拟同步到 GitHub! (请在 Tauri 版本中实现真实同步)"); // 使用封装的 success 函数
+      success("已成功模拟同步到 GitHub! (请在 Tauri 版本中实现真实同步)");
     } catch (err) {
       console.error("同步到 GitHub 失败:", err);
-      error("同步到 GitHub 失败，请检查 Git 配置和网络。"); // 使用封装的 error 函数
+      error("同步到 GitHub 失败，请检查 Git 配置和网络。");
     }
   };
 
   const handleDownload = () => {
-    const blob = new Blob([kbContent], { type: "text/markdown;charset=utf-8" });
+    const blob = new Blob([mainContent], {
+      type: "text/markdown;charset=utf-8",
+    }); // 使用 mainContent
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -351,31 +458,21 @@ const AppContent: React.FC = () => {
     setIsPreviewModalOpen(false);
   };
 
+  // --- 修改：previewMarkdown 基于 mainContent 计算 ---
   const previewMarkdown = useMemo(() => {
-    if (loading) {
-      return "";
+    if (loading || loadingRemote) {
+      return loadingRemote ? "正在加载远程内容..." : "";
     }
 
-    // 在预览计算时直接获取最新的知识库内容
-    const getLatestKbContent = (): string => {
-      const stored = localStorage.getItem("clipper_kb_content");
-      let cleanContent = (stored || "").trim();
-      if (!cleanContent.startsWith("# 知识库")) {
-        cleanContent = "# 知识库\n\n" + cleanContent;
-      }
-      return cleanContent;
-    };
+    let baseContent = mainContent; // 使用 mainContent 作为基础
 
-    // **关键修改：只要用户在输入内容，就显示预览**
+    // 在 baseContent 上叠加本地预览
     if (
       resourceInput.title ||
       resourceInput.summary ||
       resourceInput.website ||
       resourceInput.github
     ) {
-      // 获取最新的知识库内容
-      let previewContent = getLatestKbContent();
-
       // 使用占位符值来生成预览内容，即使字段为空
       const previewResource = {
         title: resourceInput.title || "(待填写标题)",
@@ -386,73 +483,35 @@ const AppContent: React.FC = () => {
       };
 
       const newResourceMarkdown = generateMarkdownForResource(previewResource);
-
       const categoryHeader = `## ${selectedCategory}`;
 
-      if (!previewContent.includes(categoryHeader)) {
-        previewContent += `\n\n${categoryHeader}\n\n${newResourceMarkdown}`;
+      let updatedContent = baseContent;
+      if (!updatedContent.includes(categoryHeader)) {
+        updatedContent += `\n\n${categoryHeader}\n\n${newResourceMarkdown}`;
       } else {
-        const categoryIndex = previewContent.indexOf(categoryHeader);
-        const afterCategoryIndex = previewContent.indexOf(
+        const categoryIndex = updatedContent.indexOf(categoryHeader);
+        const afterCategoryIndex = updatedContent.indexOf(
           "\n## ",
           categoryIndex + categoryHeader.length
         );
         let insertIndex;
         if (afterCategoryIndex === -1) {
-          insertIndex = previewContent.length;
+          insertIndex = updatedContent.length;
         } else {
           insertIndex = afterCategoryIndex;
         }
-        previewContent =
-          previewContent.substring(0, insertIndex) +
+        updatedContent =
+          updatedContent.substring(0, insertIndex) +
           `\n\n${newResourceMarkdown}` +
-          previewContent.substring(insertIndex);
+          updatedContent.substring(insertIndex);
       }
 
-      previewContent = previewContent.trim().replace(/\n{3,}/g, "\n\n");
-
-      let cleanPreviewContent = previewContent.trim();
-      if (!cleanPreviewContent.startsWith("# 知识库")) {
-        cleanPreviewContent = "# 知识库\n\n" + cleanPreviewContent;
-      }
-
-      return cleanPreviewContent;
-    } else {
-      // 如果用户没有输入任何内容，显示原始知识库内容
-      return getLatestKbContent();
+      updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
+      baseContent = updatedContent;
     }
-  }, [
-    loading,
-    resourceInput.title,
-    resourceInput.summary,
-    resourceInput.website,
-    resourceInput.github,
-    selectedCategory,
-  ]);
 
-  // 新增: 监听外部点击以关闭下拉菜单
-  useEffect(() => {
-    // 定义点击处理函数
-    const handleClickOutside = (event: MouseEvent) => {
-      // 如果 dropdownRef.current 存在（组件已挂载）
-      // 并且点击的目标不在 dropdownRef 所引用的元素内部
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        // 关闭下拉菜单
-        setIsDropdownOpen(false);
-      }
-    };
-
-    // 组件挂载后，添加事件监听器
-    document.addEventListener("mousedown", handleClickOutside);
-
-    // 返回清理函数，在组件卸载前移除事件监听器
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []); // 空依赖数组，意味着这个 effect 只在组件挂载和卸载时运行一次
+    return baseContent;
+  }, [mainContent, loading, loadingRemote, resourceInput, selectedCategory]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900">
@@ -536,16 +595,12 @@ const AppContent: React.FC = () => {
               </div>
 
               <div>
-                {" "}
-                {/* 这个是包裹 label 的 div */}
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   分类 * (必选)
                 </label>
                 <div className="flex space-x-2">
                   {/* **自定义下拉菜单 - 添加 ref** */}
                   <div ref={dropdownRef} className="relative w-64 max-w-full">
-                    {" "}
-                    {/* 添加 ref={dropdownRef} */}
                     <button
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white flex justify-between items-center"
@@ -561,12 +616,13 @@ const AppContent: React.FC = () => {
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                       </svg>
                     </button>
+
                     {isDropdownOpen && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {categories.map((cat) => (
                           <div
                             key={cat}
-                            onClick={() => handleCategorySelect(cat)} // 这个点击会自动关闭菜单，因为 handleCategorySelect 里调用了 setIsDropdownOpen(false)
+                            onClick={() => handleCategorySelect(cat)}
                             className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
                               selectedCategory === cat ? "bg-blue-100" : ""
                             }`}
@@ -577,6 +633,7 @@ const AppContent: React.FC = () => {
                       </div>
                     )}
                   </div>
+
                   {/* **新分类输入框 + 附加按钮** */}
                   <div className="flex-1 flex">
                     <input
@@ -596,6 +653,7 @@ const AppContent: React.FC = () => {
                 </div>
               </div>
 
+              {/* 操作按钮组 */}
               <div className="flex space-x-2 pt-4">
                 <button
                   onClick={handleAddResource}
@@ -605,11 +663,91 @@ const AppContent: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSync}
-                  className="bg-purple-600 hover:bg-purple-700  text-white px-4 py-2 rounded-lg font-medium text-sm transition duration-200 flex-1"
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition duration-200 flex-1"
                 >
                   模拟同步到 GitHub
                 </button>
               </div>
+
+              {/* --- 新增：GitHub 配置 UI --- */}
+              <div className="pt-4 border-t border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="useRemoteToggle"
+                    checked={useRemoteContent}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setUseRemoteContent(checked);
+                      localStorage.setItem(
+                        "use_remote_content",
+                        checked.toString()
+                      );
+                    }}
+                  />
+                  <label
+                    htmlFor="useRemoteToggle"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    使用 GitHub 远程内容
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={githubOwner}
+                    onChange={(e) => setGithubOwner(e.target.value)}
+                    onBlur={(e) =>
+                      localStorage.setItem("github_owner", e.target.value)
+                    }
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="GitHub 用户名"
+                  />
+                  <input
+                    type="text"
+                    value={githubRepo}
+                    onChange={(e) => setGithubRepo(e.target.value)}
+                    onBlur={(e) =>
+                      localStorage.setItem("github_repo", e.target.value)
+                    }
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="仓库名"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const loadMainContent = async () => {
+                      if (useRemoteContent && githubOwner && githubRepo) {
+                        setLoadingRemote(true);
+                        try {
+                          const content = await fetchReadmeFromGithub(
+                            githubOwner,
+                            githubRepo
+                          );
+                          setMainContent(content);
+                          success("成功刷新 GitHub 内容！");
+                        } catch (err) {
+                          console.error("刷新失败:", err);
+                          error(`刷新失败: ${(err as Error).message}`);
+                        } finally {
+                          setLoadingRemote(false);
+                        }
+                      }
+                    };
+                    loadMainContent();
+                  }}
+                  disabled={
+                    loadingRemote ||
+                    !useRemoteContent ||
+                    !githubOwner ||
+                    !githubRepo
+                  }
+                  className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  刷新 GitHub 内容
+                </button>
+              </div>
+              {/* --- End 新增 --- */}
             </div>
           </div>
 
@@ -618,6 +756,18 @@ const AppContent: React.FC = () => {
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-xl font-semibold text-gray-800">实时预览</h2>
               <div className="flex space-x-2">
+                <button
+                  onClick={handleAddResource}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
+                >
+                  添加到知识库
+                </button>
+                <button
+                  onClick={handleSync}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
+                >
+                  同步到 GitHub
+                </button>
                 <button
                   onClick={openFullscreenModal}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition duration-200"
@@ -634,13 +784,15 @@ const AppContent: React.FC = () => {
             </div>
 
             {/* 预览内容区域 - 占据剩余空间并启用滚动 */}
-            {/* 修改：添加 ref */}
             <div
               ref={previewContainerRef}
               className="flex-1 border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-y-auto min-h-0"
             >
-              {loading ? (
-                <div className="text-center text-gray-500 py-6">加载中...</div>
+              {/* --- 修改渲染逻辑 --- */}
+              {loading || loadingRemote ? (
+                <div className="text-center text-gray-500 py-6">
+                  {loadingRemote ? "正在加载远程内容..." : "加载中..."}
+                </div>
               ) : (
                 <MarkdownRenderer>{previewMarkdown}</MarkdownRenderer>
               )}
@@ -655,7 +807,7 @@ const AppContent: React.FC = () => {
         <span className="text-gray-400">© {new Date().getFullYear()}</span>
       </footer>
 
-      {/* 模态框保持不变 */}
+      {/* 模态框 */}
       {isPreviewModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
@@ -669,8 +821,11 @@ const AppContent: React.FC = () => {
               </button>
             </div>
             <div className="flex-1 p-6 overflow-y-auto">
-              {loading ? (
-                <div className="text-center text-gray-500">加载中...</div>
+              {/* --- 修改模态框渲染逻辑 --- */}
+              {loading || loadingRemote ? (
+                <div className="text-center text-gray-500">
+                  正在加载远程内容...
+                </div>
               ) : (
                 <MarkdownRenderer>{previewMarkdown}</MarkdownRenderer>
               )}
@@ -694,8 +849,6 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <ToastProvider position="top-center" duration={2000}>
-      {" "}
-      {/* 将 AppContent 包裹在 ToastProvider 中 */}
       <AppContent />
     </ToastProvider>
   );
