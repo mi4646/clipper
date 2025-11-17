@@ -750,7 +750,7 @@ const AppContent: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSync}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition duration-200 flex-1"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition duration-200 flex-1"
                 >
                   模拟同步到 GitHub
                 </button>
