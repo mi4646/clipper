@@ -512,13 +512,12 @@ const AppContent: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   分类 * (必选)
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {/* **替换为自定义下拉菜单** */}
-                  <div className="relative w-full">
-                    {/* **下拉触发器** */}
+                <div className="flex space-x-2">
+                  {/* **自定义下拉菜单** */}
+                  <div className="relative w-64 max-w-full">
                     <button
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white flex justify-between items-center"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white flex justify-between items-center"
                     >
                       <span>{selectedCategory || "请选择分类"}</span>
                       <svg
@@ -532,7 +531,6 @@ const AppContent: React.FC = () => {
                       </svg>
                     </button>
 
-                    {/* **下拉菜单内容** */}
                     {isDropdownOpen && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {categories.map((cat) => (
@@ -550,18 +548,18 @@ const AppContent: React.FC = () => {
                     )}
                   </div>
 
-                  {/* **新分类输入框和按钮** */}
-                  <div className="flex gap-2 w-full md:w-auto">
+                  {/* **新分类输入框 + 附加按钮** */}
+                  <div className="flex-1 flex">
                     <input
                       type="text"
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-r-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="输入新分类名"
                     />
                     <button
                       onClick={handleAddNewCategory}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-2 rounded-lg text-xs font-medium transition duration-200"
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-r-lg text-sm font-medium transition duration-200 border-l-0"
                     >
                       添加
                     </button>
@@ -569,20 +567,21 @@ const AppContent: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleAddResource}
-                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg font-medium text-sm transition duration-200 shadow-sm w-full md:w-auto"
-              >
-                添加到知识库
-              </button>
+              <div className="flex space-x-2 pt-4">
+                <button
+                  onClick={handleAddResource}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition duration-200 shadow-sm flex-1"
+                >
+                  添加到知识库
+                </button>
+                <button
+                  onClick={handleSync}
+                  className="bg-purple-600 hover:bg-purple-700  text-white px-4 py-2 rounded-lg font-medium text-sm transition duration-200 flex-1"
+                >
+                  模拟同步到 GitHub
+                </button>
+              </div>
             </div>
-
-            <button
-              onClick={handleSync}
-              className="mt-3 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg font-medium text-sm transition duration-200 shadow-sm w-full md:w-auto"
-            >
-              模拟同步到 GitHub
-            </button>
           </div>
 
           {/* 右侧：实时预览区 */}
