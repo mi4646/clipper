@@ -13,8 +13,8 @@ import MarkdownRenderer from "./components/MarkdownRenderer";
 interface Resource {
   title: string;
   summary: string;
-  website: string;
-  github: string;
+  website: string; // 存储域名部分
+  github: string; // 存储域名部分
   category: string;
 }
 
@@ -61,6 +61,7 @@ const mockAddCategory = (name: string): Promise<void> => {
 
 // --- 生成单个资源的 Markdown 片段 ---
 const generateMarkdownForResource = (resource: Resource): string => {
+  // 注意：这里 resource.website 和 resource.github 现在已经是完整URL
   return `### ${resource.title}\n- ${resource.summary} 🔗 [官网](${
     resource.website
   }) ｜ [GitHub](${resource.github || resource.website})`;
@@ -71,13 +72,16 @@ const AppContent: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [newCategory, setNewCategory] = useState<string>("");
+
+  // 修改 resourceInput 类型注解，website 和 github 现在只存域名
   const [resourceInput, setResourceInput] = useState<Resource>({
     title: "",
     summary: "",
-    website: "",
-    github: "",
+    website: "", // 存储域名部分
+    github: "", // 存储域名部分
     category: "",
   });
+
   const [loading, setLoading] = useState<boolean>(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const isInitialScrollRef = useRef(true);
@@ -95,29 +99,19 @@ const AppContent: React.FC = () => {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const tocRef = useRef<HTMLDivElement>(null);
 
-  // --- 新增函数：生成缓存键 ---
+  // 协议选择 state
+  const [websiteProtocol, setWebsiteProtocol] = useState<string>("https://");
+
+  // 生成缓存键
   const generateCacheKey = (owner: string, repo: string): string => {
     return `github_readme_cache_${owner}_${repo}`;
   };
 
-  // --- 新增函数：清理指定仓库的缓存 ---
+  // 清理指定仓库的缓存
   const clearCacheForRepo = (owner: string, repo: string): void => {
     const key = generateCacheKey(owner, repo);
     localStorage.removeItem(key);
     console.log(`已清理 ${owner}/${repo} 的缓存`);
-  };
-
-  // --- 新增函数：清理所有缓存 ---
-  const clearAllCache = (): void => {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("github_readme_cache_")) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
-    console.log("已清理所有 GitHub 缓存");
   };
 
   // 从 GitHub 获取 README.md (需要 Token 访问私有仓库，并正确处理中文，带缓存)
@@ -337,7 +331,7 @@ const AppContent: React.FC = () => {
     if (
       resourceInput.title &&
       resourceInput.summary &&
-      resourceInput.website &&
+      resourceInput.website && // 这里是域名部分
       selectedCategory &&
       previewContainerRef.current &&
       !isInitialScrollRef.current
@@ -360,11 +354,22 @@ const AppContent: React.FC = () => {
     }
   }, [resourceInput, selectedCategory]);
 
+  // --- 修改 handleInputChange 函数 ---
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setResourceInput((prev) => ({ ...prev, [name]: value }));
+
+    // 对于 websiteDomain 和 githubDomain，我们只更新 resourceInput 中的域名部分
+    if (name === "websiteDomain" || name === "githubDomain") {
+      setResourceInput((prev) => ({
+        ...prev,
+        [name === "websiteDomain" ? "website" : "github"]: value,
+      }));
+    } else {
+      // 其他字段照常处理
+      setResourceInput((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleCategorySelect = (category: string) => {
@@ -391,13 +396,14 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // --- 修改 handleAddResource 函数 ---
   const handleAddResource = async () => {
     dismiss();
 
     if (
       !resourceInput.title ||
       !resourceInput.summary ||
-      !resourceInput.website ||
+      !resourceInput.website || // 这里是域名部分，不是完整URL
       !selectedCategory
     ) {
       error("请填写所有必填项（标题、说明、官网、分类）。");
@@ -405,8 +411,18 @@ const AppContent: React.FC = () => {
     }
 
     try {
+      // --- 在生成 Markdown 之前，拼接完整的 URL ---
+      // 拼接官网地址
+      const fullWebsiteUrl = `${websiteProtocol}${resourceInput.website}`;
+      // 拼接 GitHub 地址 (如果存在)
+      const fullGithubUrl = resourceInput.github
+        ? `https://github.com/${resourceInput.github}`
+        : "";
+
       const newResourceMarkdown = generateMarkdownForResource({
         ...resourceInput,
+        website: fullWebsiteUrl, // 使用拼接后的完整 URL
+        github: fullGithubUrl, // 使用拼接后的完整 URL
         category: selectedCategory,
       });
 
@@ -442,13 +458,15 @@ const AppContent: React.FC = () => {
       setMainContent(updatedContent);
       success("资源已添加到知识库！");
 
+      // 清空输入框和协议选择
       setResourceInput({
         title: "",
         summary: "",
-        website: "",
-        github: "",
+        website: "", // 清空域名部分
+        github: "", // 清空域名部分
         category: selectedCategory,
       });
+      setWebsiteProtocol("https://"); // 重置协议为默认值
     } catch (err) {
       console.error("添加资源失败:", err);
       error("添加资源失败，请检查控制台。");
@@ -643,15 +661,22 @@ const AppContent: React.FC = () => {
     if (
       resourceInput.title ||
       resourceInput.summary ||
-      resourceInput.website ||
-      resourceInput.github
+      resourceInput.website || // 这里是域名部分
+      resourceInput.github // 这里是域名部分
     ) {
-      // 使用占位符值来生成预览内容，即使字段为空
+      // --- 修改：在预览时也拼接完整的 URL ---
+      const fullWebsiteUrl = resourceInput.website
+        ? `${websiteProtocol}${resourceInput.website}`
+        : "https://example.com";
+      const fullGithubUrl = resourceInput.github
+        ? `https://github.com/${resourceInput.github}`
+        : "";
+
       const previewResource = {
         title: resourceInput.title || "(待填写标题)",
         summary: resourceInput.summary || "(待填写说明)",
-        website: resourceInput.website || "https://example.com",
-        github: resourceInput.github || "",
+        website: fullWebsiteUrl, // 使用拼接后的完整 URL
+        github: fullGithubUrl, // 使用拼接后的完整 URL
         category: selectedCategory,
       };
 
@@ -684,7 +709,14 @@ const AppContent: React.FC = () => {
     }
 
     return baseContent;
-  }, [mainContent, loading, loadingRemote, resourceInput, selectedCategory]);
+  }, [
+    mainContent,
+    loading,
+    loadingRemote,
+    resourceInput,
+    selectedCategory,
+    websiteProtocol,
+  ]);
 
   // 从 localStorage 读取当前的 useRemoteContent 设置，用于 UI 显示
   const currentUseRemoteContent =
@@ -819,31 +851,51 @@ const AppContent: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* --- 修改：官网地址输入 --- */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-2">
                     官网地址 * (必填)
                   </label>
-                  <input
-                    type="url"
-                    name="website"
-                    value={resourceInput.website}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="https://..."
-                  />
+                  <div className="flex">
+                    {/* 协议选择下拉框 */}
+                    <select
+                      value={websiteProtocol}
+                      onChange={(e) => setWebsiteProtocol(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    >
+                      <option value="https://">https://</option>
+                      <option value="http://">http://</option>
+                    </select>
+                    {/* 域名输入框 */}
+                    <input
+                      type="text" // 注意：这里类型改为 text，因为用户只需要输入域名
+                      name="websiteDomain" // 名称改为 websiteDomain，以区分协议
+                      value={resourceInput.website} // 绑定到 resourceInput.website，但只代表域名部分
+                      onChange={handleInputChange}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="example.com"
+                    />
+                  </div>
                 </div>
+
+                {/* --- 修改：GitHub 地址输入 --- */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-2">
                     GitHub 地址 (可选)
                   </label>
-                  <input
-                    type="url"
-                    name="github"
-                    value={resourceInput.github}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="https://github.com/..."
-                  />
+                  <div className="flex items-center">
+                    <span className="px-3 py-2 border border-r-0 border-gray-300 rounded-l-lg bg-gray-100 text-sm text-gray-600">
+                      https://github.com/
+                    </span>
+                    <input
+                      type="text"
+                      name="githubDomain" // 名称保持不变，但含义是 owner/repo
+                      value={resourceInput.github} // 绑定到 resourceInput.github，代表 owner/repo 部分
+                      onChange={handleInputChange}
+                      className="flex-1 px-3 py-2 border border-l-0 border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="owner/repo" // 修改 placeholder
+                    />
+                  </div>
                 </div>
               </div>
 
