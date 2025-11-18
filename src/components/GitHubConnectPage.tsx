@@ -36,7 +36,7 @@ const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
 
   const handleCreateTokenClick = () => {
     window.open(
-      "https://github.com/settings/personal-access-tokens/new?scopes=repo,user&description=Clipper%20Access%20Token",
+      "https://github.com/settings/personal-access-tokens/new",
       "_blank"
     );
   };
@@ -105,30 +105,47 @@ const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
           连接到 GitHub →
         </button>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-800 mb-2">
-            如何创建 GitHub token:
+        {/* --- 新增：权限说明提示框 --- */}
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-800 mb-2 flex items-center">
+            <svg
+              className="w-4 h-4 mr-1"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                clipRule="evenodd"
+              ></path>
+            </svg>
+            设置 Token 权限
           </h3>
-          <ol className="text-xs text-gray-600 space-y-1">
-            <li>
-              1. 访问 GitHub Settings → Developer settings → Personal access
-              tokens
+          <p className="text-xs text-blue-600 mb-2">
+            为了同步功能正常工作，请在创建 Token 时设置以下权限：
+          </p>
+          <ul className="text-xs text-blue-600 space-y-1">
+            <li className="flex items-start">
+              <span className="mr-1">•</span>
+              <span>
+                <strong>Repository permissions (仓库权限):</strong> Contents
+                (内容) - <strong>Read and write (读写)</strong>
+              </span>
             </li>
-            <li>2. 点击 “Generate new token (classic)”</li>
-            <li>
-              3. 选择权限范围：{" "}
-              <code className="bg-gray-200 px-1 rounded">repo</code> 和{" "}
-              <code className="bg-gray-200 px-1 rounded">user</code>
+            <li className="flex items-start">
+              <span className="mr-1">•</span>
+              <span>选择您要连接的仓库</span>
             </li>
-            <li>4. 复制生成的 token 并粘贴到上方</li>
-          </ol>
+          </ul>
           <button
             onClick={handleCreateTokenClick}
-            className="mt-2 text-blue-600 hover:text-blue-800 text-xs font-medium"
+            className="mt-2 text-blue-700 hover:text-blue-900 text-xs font-medium underline"
           >
-            在 GitHub 上创建 token →
+            前往 GitHub 创建 Fine-grained Token →
           </button>
         </div>
+        {/* --- End 新增 --- */}
       </div>
     </div>
   );

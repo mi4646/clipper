@@ -482,23 +482,101 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // 同步成功后清理缓存
+  // Github API同步成功后清理缓存
   const handleSync = async () => {
     dismiss();
     try {
-      alert("模拟同步到 GitHub！在 Tauri 版本中将调用 Git 命令。");
+      const token = localStorage.getItem("github_token");
+      const owner = localStorage.getItem("github_owner");
+      const repo = localStorage.getItem("github_repo");
 
-      // 模拟同步后，清理对应仓库的缓存
-      const savedOwner = localStorage.getItem("github_owner") || "";
-      const savedRepo = localStorage.getItem("github_repo") || "";
-      if (savedOwner && savedRepo) {
-        clearCacheForRepo(savedOwner, savedRepo);
+      if (!token || !owner || !repo) {
+        error("GitHub 配置不完整，请先连接 GitHub。");
+        return;
       }
 
-      success("已成功模拟同步到 GitHub! (请在 Tauri 版本中实现真实同步)");
+      // 获取文件内容（使用 mainContent）
+      const fileContent = mainContent; // 使用当前编辑的内容
+      const fileName = "README.md"; // 固定文件名，或从其他地方获取
+      const commitMessage = `Update knowledge base - ${new Date().toISOString()}`;
+
+      // 1. 获取远程文件的 SHA (如果存在)
+      const getContentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`;
+      const getContentResponse = await fetch(getContentUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      });
+
+      let sha = null;
+      if (getContentResponse.ok) {
+        const getContentData = await getContentResponse.json();
+        sha = getContentData.sha; // 获取现有文件的 SHA
+      } else if (getContentResponse.status !== 404) {
+        // 如果不是 404（文件不存在），则抛出错误
+        const errorData = await getContentResponse.json().catch(() => ({})); // 尝试解析错误信息
+        throw new Error(
+          `获取远程文件信息失败: ${getContentResponse.status} - ${
+            errorData.message || getContentResponse.statusText
+          }`
+        );
+      }
+      // 如果是 404，则 sha 保持为 null，表示文件不存在，将创建新文件
+
+      // 2. 将内容编码为 base64
+      const contentBytes = new TextEncoder().encode(fileContent);
+      const contentBase64 = btoa(String.fromCharCode(...contentBytes));
+
+      // 3. 准备请求体
+      const body = {
+        message: commitMessage,
+        content: contentBase64,
+        ...(sha && { sha }), // 如果 SHA 存在，则包含在请求体中（用于更新）
+      };
+
+      // 4. 上传或更新文件
+      const putContentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`;
+      const putResponse = await fetch(putContentUrl, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!putResponse.ok) {
+        const errorData = await putResponse.json().catch(() => ({})); // 尝试解析错误信息
+        if (putResponse.status === 403) {
+          // 特别处理 403 错误
+          throw new Error(
+            `GitHub API 403 错误: ${
+              errorData.message || putResponse.statusText
+            }。请检查您的 Personal Access Token 是否具有 'repo' 权限。`
+          );
+        } else {
+          throw new Error(
+            `GitHub API 错误: ${putResponse.status} - ${
+              errorData.message || putResponse.statusText
+            }`
+          );
+        }
+      }
+
+      const putData = await putResponse.json();
+      console.log("同步成功:", putData);
+
+      // 同步成功后，清理对应仓库的缓存
+      if (owner && repo) {
+        clearCacheForRepo(owner, repo);
+      }
+
+      success("已成功同步到 GitHub!");
     } catch (err) {
       console.error("同步到 GitHub 失败:", err);
-      error("同步到 GitHub 失败，请检查 Git 配置和网络。");
+      error(`同步失败: ${(err as Error).message}`);
     }
   };
 
