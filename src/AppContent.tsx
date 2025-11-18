@@ -94,7 +94,32 @@ const AppContent: React.FC = () => {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const tocRef = useRef<HTMLDivElement>(null);
 
-  // --- 新增函数：从 GitHub 获取 README.md (需要 Token 访问私有仓库，并正确处理中文) ---
+  // --- 新增函数：生成缓存键 ---
+  const generateCacheKey = (owner: string, repo: string): string => {
+    return `github_readme_cache_${owner}_${repo}`;
+  };
+
+  // --- 新增函数：清理指定仓库的缓存 ---
+  const clearCacheForRepo = (owner: string, repo: string): void => {
+    const key = generateCacheKey(owner, repo);
+    localStorage.removeItem(key);
+    console.log(`已清理 ${owner}/${repo} 的缓存`);
+  };
+
+  // --- 新增函数：清理所有缓存 ---
+  const clearAllCache = (): void => {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("github_readme_cache_")) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    console.log("已清理所有 GitHub 缓存");
+  };
+
+  // 从 GitHub 获取 README.md (需要 Token 访问私有仓库，并正确处理中文，带缓存)
   const fetchReadmeFromGithub = async (
     owner: string,
     repo: string
@@ -103,24 +128,47 @@ const AppContent: React.FC = () => {
       throw new Error("GitHub owner 和 repo 不能为空");
     }
 
-    // 从 localStorage 获取 Token
+    // 1. 生成缓存键
+    const cacheKey = generateCacheKey(owner, repo);
+
+    // 2. 检查缓存是否存在且未过期 (例如 10 分钟过期时间)
+    const cacheEntry = localStorage.getItem(cacheKey);
+    if (cacheEntry) {
+      try {
+        const { content, timestamp } = JSON.parse(cacheEntry);
+        const now = new Date().getTime();
+        const cacheDuration = 10 * 60 * 1000; // 10分钟，单位毫秒
+
+        if (now - timestamp < cacheDuration) {
+          console.log(`从缓存加载 ${owner}/${repo} 的 README.md`);
+          return content;
+        } else {
+          console.log(`缓存已过期，将从 ${owner}/${repo} 重新获取 README.md`);
+          // 缓存过期，删除旧缓存
+          localStorage.removeItem(cacheKey);
+        }
+      } catch (e) {
+        console.warn("缓存数据解析失败，将重新获取", e);
+        // 解析失败，删除损坏的缓存
+        localStorage.removeItem(cacheKey);
+      }
+    }
+
+    // 3. 缓存未命中或已过期，执行 API 调用
+    console.log(`从 GitHub API 获取 ${owner}/${repo} 的 README.md`);
+
     const token = localStorage.getItem("github_token");
     if (!token) {
       throw new Error("GitHub Token 未设置，请先连接 GitHub。");
     }
 
-    // 构建 API URL
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/README.md`;
 
-    // 构建请求头
     const headers: HeadersInit = {
-      Accept: "application/vnd.github.v3+json", // GitHub API v3
+      Accept: "application/vnd.github.v3+json",
     };
-
-    // 添加 Authorization 头
     headers["Authorization"] = `Bearer ${token}`;
 
-    // 发送请求
     const response = await fetch(apiUrl, {
       headers,
     });
@@ -140,21 +188,24 @@ const AppContent: React.FC = () => {
     }
 
     const data = await response.json();
-    // GitHub API 返回的内容是 base64 编码的
     const base64Content = data.content;
 
-    // --- 正确解码 Base64 并处理 UTF-8 内容 ---
-    // 1. 将 Base64 字符串解码为字节数组 (Uint8Array)
     const binaryString = atob(base64Content);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    // 2. 使用 TextDecoder 将字节数组解码为 UTF-8 字符串
     const decoder = new TextDecoder("utf-8");
     const content = decoder.decode(bytes);
-    // --- End 修改 ---
+
+    // 4. API 调用成功后，将结果写入缓存
+    const cacheData = {
+      content: content,
+      timestamp: new Date().getTime(), // 存储当前时间戳
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    console.log(`已缓存 ${owner}/${repo} 的 README.md`);
 
     return content;
   };
@@ -430,10 +481,19 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // 同步成功后清理缓存
   const handleSync = async () => {
     dismiss();
     try {
       alert("模拟同步到 GitHub！在 Tauri 版本中将调用 Git 命令。");
+
+      // 模拟同步后，清理对应仓库的缓存
+      const savedOwner = localStorage.getItem("github_owner") || "";
+      const savedRepo = localStorage.getItem("github_repo") || "";
+      if (savedOwner && savedRepo) {
+        clearCacheForRepo(savedOwner, savedRepo);
+      }
+
       success("已成功模拟同步到 GitHub! (请在 Tauri 版本中实现真实同步)");
     } catch (err) {
       console.error("同步到 GitHub 失败:", err);
