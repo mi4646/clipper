@@ -6,8 +6,9 @@ import React, {
   useCallback,
 } from "react";
 import md5 from "crypto-js/md5";
-import { ToastProvider, useToast } from "./components/ToastProvider";
+import AiTip from "./components/AiTip";
 import MarkdownRenderer from "./components/MarkdownRenderer";
+import { ToastProvider, useToast } from "./components/ToastProvider";
 
 // --- 类型定义 ---
 interface Resource {
@@ -843,28 +844,24 @@ const AppContent: React.FC = () => {
       const prompt = `根据以下信息，生成一段简洁、准确的中文说明文字（100字以内）。标题: "${title}", URL: "${url}".${additionalInfo} 说明:`;
 
       // 3. 调用 AI API (示例使用 OpenAI)
-      const apiKey =
-        localStorage.getItem("openai_api_key") ||"";
+      const apiKey = localStorage.getItem("openai_api_key") || "";
       if (!apiKey) {
         throw new Error("OpenAI API Key 未设置。请在设置中配置。");
       }
 
-      const aiResponse = await fetch(
-        "/xiangcao/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: "gemini-2.0-flash", // 或其他模型
-            messages: [{ role: "user", content: prompt }],
-            max_tokens: 100, // 限制输出长度
-            temperature: 0.3, // 控制随机性
-          }),
-        }
-      );
+      const aiResponse = await fetch("/xiangcao/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gemini-2.0-flash", // 或其他模型
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 100, // 限制输出长度
+          temperature: 0.3, // 控制随机性
+        }),
+      });
 
       if (!aiResponse.ok) {
         const errorData = await aiResponse.json().catch(() => ({}));
@@ -939,46 +936,60 @@ const AppContent: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   说明 * (必填)
                 </label>
-                <textarea
-                  name="summary"
-                  value={resourceInput.summary}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-                  rows={3}
-                  placeholder="例如：轻快纯粹的跨平台 Markdown 编辑器，内置 AI 辅助..."
-                />
-                {/* AI 补充说明按钮 */}
-                <div className="mt-2">
-                  <button
-                    onClick={() =>
-                      generateAISummary(
-                        resourceInput.title,
-                        resourceInput.website || resourceInput.github
-                      )
-                    }
-                    disabled={
-                      aiGenerating ||
-                      !resourceInput.title ||
-                      (!resourceInput.website && !resourceInput.github)
-                    }
-                    className={`text-xs ${
-                      aiGenerating ||
-                      !resourceInput.title ||
-                      (!resourceInput.website && !resourceInput.github)
-                        ? "text-gray-400 cursor-not-allowed"
-                        : "text-blue-600 hover:text-blue-800"
-                    }`}
-                  >
-                    {aiGenerating ? "AI 生成中..." : "AI 补充说明"}
-                  </button>
-                  {aiError && (
-                    <p className="text-xs text-red-500 mt-1">{aiError}</p>
-                  )}
+                <div className="flex items-start space-x-2">
+                  {" "}
+                  {/* 使用 Flexbox 布局 */}
+                  {/* 说明输入框 */}
+                  <textarea
+                    name="summary"
+                    value={resourceInput.summary}
+                    onChange={handleInputChange}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                    rows={3}
+                    placeholder="例如：轻快纯粹的跨平台 Markdown 编辑器，内置 AI 辅助..."
+                  />
+                  {/* AI 补充说明按钮和提示图标 */}
+                  <div className="flex flex-col justify-between">
+                    {" "}
+                    {/* 使用 Flexbox 垂直排列 */}
+                    <div className="flex items-center space-x-2">
+                      {" "}
+                      {/* 水平排列按钮和图标 */}
+                      <button
+                        onClick={() =>
+                          generateAISummary(
+                            resourceInput.title,
+                            resourceInput.website || resourceInput.github
+                          )
+                        }
+                        disabled={
+                          aiGenerating ||
+                          !resourceInput.title ||
+                          (!resourceInput.website && !resourceInput.github)
+                        }
+                        className={`text-xs ${
+                          aiGenerating ||
+                          !resourceInput.title ||
+                          (!resourceInput.website && !resourceInput.github)
+                            ? "text-gray-400 cursor-not-allowed"
+                            : "text-blue-600 hover:text-blue-800"
+                        }`}
+                      >
+                        {aiGenerating ? "AI 生成中..." : "AI 补充说明"}
+                      </button>
+                      {/*使用封装的 AiTip 组件 */}
+                      <AiTip
+                        title="AI 提示"
+                        content="调用可能产生费用，请注意控制频率。生成内容仅供参考，可能需要微调。"
+                      />
+                    </div>
+                    {aiError && (
+                      <p className="text-xs text-red-500 mt-1">{aiError}</p>
+                    )}
+                  </div>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* --- 修改：官网地址输入 --- */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-2">
                     官网地址 * (必填)
@@ -1100,10 +1111,6 @@ const AppContent: React.FC = () => {
                   模拟同步到 GitHub
                 </button>
               </div>
-
-              {/* --- 移除：GitHub 配置 UI --- */}
-              {/* 原来的 GitHub 配置部分已完全删除 */}
-              {/* --- End 移除 --- */}
             </div>
           </div>
 
@@ -1145,7 +1152,7 @@ const AppContent: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer - 添加上边距 */}
+      {/* Footer 底部 */}
       <footer className="text-center text-xs text-gray-500 py-3 border-t border-gray-200 bg-white">
         Clipper — 为思想留光。{" "}
         <span className="text-gray-400">© {new Date().getFullYear()}</span>

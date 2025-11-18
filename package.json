@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.4",
+    "@floating-ui/react": "^0.27.16",
     "crypto-js": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
