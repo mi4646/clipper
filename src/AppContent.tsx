@@ -69,6 +69,9 @@ const generateMarkdownForResource = (resource: Resource): string => {
 
 // --- 子组件：AppContent，实际的业务逻辑 ---
 const AppContent: React.FC = () => {
+  const [aiGenerating, setAiGenerating] = useState<boolean>(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [newCategory, setNewCategory] = useState<string>("");
@@ -792,6 +795,102 @@ const AppContent: React.FC = () => {
     }
   }, [isPreviewModalOpen, previewMarkdown, generateToc]);
 
+  const generateAISummary = async (title: string, url: string) => {
+    if (!title || !url) {
+      setAiError("请先填写标题和地址。");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      // 1. 获取补充信息 (示例：仅处理 GitHub)
+      let additionalInfo = "";
+      const githubMatch = url.match(/github\.com\/([^\/]+)\/([^\/]+)/i);
+      if (githubMatch) {
+        const [_, owner, repo] = githubMatch;
+        try {
+          // 调用 GitHub API 获取仓库描述
+          const token = localStorage.getItem("github_token"); // 需要 GitHub Token
+          const headers: HeadersInit = {
+            Accept: "application/vnd.github.v3+json",
+          };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+
+          const response = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}`,
+            { headers }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            additionalInfo = data.description
+              ? ` Repository description: ${data.description}.`
+              : "";
+          } else {
+            console.warn(
+              `Failed to fetch repo info: ${response.status} ${response.statusText}`
+            );
+            // 如果 API 失败，不中断 AI 调用，仅记录
+          }
+        } catch (err) {
+          console.error("Error fetching GitHub repo info:", err);
+          // 如果获取失败，不中断 AI 调用，仅记录
+        }
+      }
+
+      // 2. 构建 Prompt
+      const prompt = `根据以下信息，生成一段简洁、准确的中文说明文字（100字以内）。标题: "${title}", URL: "${url}".${additionalInfo} 说明:`;
+
+      // 3. 调用 AI API (示例使用 OpenAI)
+      const apiKey =
+        localStorage.getItem("openai_api_key") ||"";
+      if (!apiKey) {
+        throw new Error("OpenAI API Key 未设置。请在设置中配置。");
+      }
+
+      const aiResponse = await fetch(
+        "/xiangcao/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "gemini-2.0-flash", // 或其他模型
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 100, // 限制输出长度
+            temperature: 0.3, // 控制随机性
+          }),
+        }
+      );
+
+      if (!aiResponse.ok) {
+        const errorData = await aiResponse.json().catch(() => ({}));
+        throw new Error(
+          `AI API 错误: ${aiResponse.status} - ${
+            errorData.error?.message || aiResponse.statusText
+          }`
+        );
+      }
+
+      const data = await aiResponse.json();
+      const generatedSummary = data.choices[0].message.content.trim();
+
+      // 4. 更新说明字段
+      setResourceInput((prev) => ({ ...prev, summary: generatedSummary }));
+      success("AI 说明已生成！");
+    } catch (err) {
+      console.error("AI 生成失败:", err);
+      const errorMessage = `AI 生成失败: ${(err as Error).message}`;
+      setAiError(errorMessage);
+      error(errorMessage);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900">
       <header className="py-3 px-6 border-b border-gray-200 bg-white">
@@ -848,6 +947,34 @@ const AppContent: React.FC = () => {
                   rows={3}
                   placeholder="例如：轻快纯粹的跨平台 Markdown 编辑器，内置 AI 辅助..."
                 />
+                {/* AI 补充说明按钮 */}
+                <div className="mt-2">
+                  <button
+                    onClick={() =>
+                      generateAISummary(
+                        resourceInput.title,
+                        resourceInput.website || resourceInput.github
+                      )
+                    }
+                    disabled={
+                      aiGenerating ||
+                      !resourceInput.title ||
+                      (!resourceInput.website && !resourceInput.github)
+                    }
+                    className={`text-xs ${
+                      aiGenerating ||
+                      !resourceInput.title ||
+                      (!resourceInput.website && !resourceInput.github)
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-blue-600 hover:text-blue-800"
+                    }`}
+                  >
+                    {aiGenerating ? "AI 生成中..." : "AI 补充说明"}
+                  </button>
+                  {aiError && (
+                    <p className="text-xs text-red-500 mt-1">{aiError}</p>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

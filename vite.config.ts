@@ -6,4 +6,13 @@ export default defineConfig({
   plugins: [
     react(),
   ],
+  server: {
+    proxy: {
+      '/xiangcao': {
+        target: 'https://ai.xiangcao.de',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/xiangcao/, ''),
+      },
+    },
+  },
 })
