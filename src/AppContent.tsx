@@ -5,6 +5,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import md5 from "crypto-js/md5";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import MarkdownRenderer from "./components/MarkdownRenderer";
 
@@ -614,21 +615,48 @@ const AppContent: React.FC = () => {
   // 添加生成目录
   const generateToc = useCallback(() => {
     if (!previewContainerRef.current) return;
-
     const headings = previewContainerRef.current.querySelectorAll(
       "h1, h2, h3, h4, h5, h6"
     );
-    const items = Array.from(headings).map((heading) => {
+
+    // 首先生成基础的 TOC 项
+    let items = Array.from(headings).map((heading) => {
       const text = heading.textContent || "";
-      const id = text
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^\w-]/g, "");
-      heading.id = id;
+
+      // 使用文本的 MD5 值作为 ID
+      const id = `h-${md5(text.trim()).toString()}`;
+
+      // 注意：这里先不设置 heading.id，等确保唯一性后再设置
       return { id, text, level: parseInt(heading.tagName.charAt(1)) };
     });
 
+    // 确保 ID 的唯一性 (虽然 MD5 基本唯一，但为了绝对安全仍检查)
+    const idCount = new Map<string, number>();
+    const uniqueItems = items.map((item) => {
+      let newId = item.id;
+      let count = idCount.get(newId) || 0;
+
+      // 如果 ID 已存在，追加计数后缀
+      while (idCount.has(newId) && idCount.get(newId)! > 0) {
+        count++;
+        newId = `${item.id}-${count}`;
+      }
+
+      // 更新计数
+      idCount.set(newId, 0); // 新的唯一 ID 计数设为 0
+      return { ...item, id: newId };
+    });
+
+    items = uniqueItems;
+
+    // 现在设置 DOM 元素的 ID
+    items.forEach((item, index) => {
+      const heading = headings[index];
+      if (heading) {
+        heading.id = item.id;
+      }
+    });
+    console.log("toc items", items);
     setTocItems(items);
   }, [previewMarkdown]);
 
@@ -946,7 +974,7 @@ const AppContent: React.FC = () => {
                       <ul className="space-y-1">
                         {tocItems.map((item) => (
                           <li
-                            key={item.id}
+                            key={item.id} // 现在 ID 是基于内容的 MD5，保证唯一
                             className={`py-1.5 px-3 rounded-md cursor-pointer transition-all duration-200 ${
                               item.level === 1
                                 ? "pl-3 font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500 shadow-sm"
