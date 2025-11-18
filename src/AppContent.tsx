@@ -363,12 +363,28 @@ const AppContent: React.FC = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    let processedValue = value; // 初始化处理后的值为原始值
 
     // 对于 websiteDomain 和 githubDomain，我们只更新 resourceInput 中的域名部分
     if (name === "websiteDomain" || name === "githubDomain") {
+      if (name === "websiteDomain") {
+        // 清理网站域名输入
+        // 移除常见的协议前缀
+        processedValue = processedValue.replace(/^(https?:\/\/)/i, "").trim();
+      } else if (name === "githubDomain") {
+        // 清理 GitHub 地址输入
+        // 移除 'https://github.com/' 前缀（不区分大小写）
+        processedValue = processedValue
+          .replace(/^https:\/\/github\.com\//i, "")
+          .trim();
+        // 还可以进一步移除协议，以防用户粘贴了没有 github.com 但有协议的链接
+        processedValue = processedValue.replace(/^(https?:\/\/)/i, "").trim();
+      }
+
+      // 将处理后的值（不包含协议或前缀）设置到状态中
       setResourceInput((prev) => ({
         ...prev,
-        [name === "websiteDomain" ? "website" : "github"]: value,
+        [name === "websiteDomain" ? "website" : "github"]: processedValue,
       }));
     } else {
       // 其他字段照常处理
@@ -975,7 +991,10 @@ const AppContent: React.FC = () => {
                       {aiGenerating ? "AI 生成中..." : "AI 补充说明"}
                     </button>
                     {/* 使用封装的 AiTip 组件 */}
-                    <AiTip title="AI 提示" content="调用可能产生费用，请注意控制频率。生成内容仅供参考，可能需要微调。"/>
+                    <AiTip
+                      title="AI 提示"
+                      content="调用可能产生费用，请注意控制频率。生成内容仅供参考，可能需要微调。"
+                    />
                   </div>
                   {/* 错误信息显示在按钮下方 */}
                   {aiError && (
