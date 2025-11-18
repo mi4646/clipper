@@ -9,20 +9,35 @@ import {
   useDismiss,
   useRole,
   autoUpdate,
+  flip,
+  shift,
 } from "@floating-ui/react";
 
 interface AiTipProps {
-  // 可以将提示内容作为 props 传入，增加组件灵活性
   content?: string;
-  // 可以传入自定义样式
   className?: string;
   title?: string;
+  // 新增：允许用户指定位置
+  placement?:
+    | "top"
+    | "bottom"
+    | "left"
+    | "right"
+    | "top-start"
+    | "top-end"
+    | "bottom-start"
+    | "bottom-end"
+    | "left-start"
+    | "left-end"
+    | "right-start"
+    | "right-end";
 }
 
 const AiTip: React.FC<AiTipProps> = ({
   content = "",
   className = "",
-  title = "AI 提示：",
+  title = "",
+  placement = "top", // 默认位置
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -30,7 +45,11 @@ const AiTip: React.FC<AiTipProps> = ({
     open,
     onOpenChange: setOpen,
     whileElementsMounted: autoUpdate,
-    placement: "top",
+    placement: placement,
+    middleware: [
+      flip({ padding: 8 }), // 当空间不足时，自动翻转到其他位置
+      shift({ padding: 8 }), // 微调位置，避免溢出
+    ],
   });
 
   const { getReferenceProps, getFloatingProps } = useInteractions([
@@ -72,12 +91,13 @@ const AiTip: React.FC<AiTipProps> = ({
             position: strategy,
             top: y ?? 0,
             left: x ?? 0,
-            width: "max-content",
+            maxWidth: "min(90vw, 300px)",
+            minWidth: "120px",
           }}
-          className={`z-10 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg shadow-lg max-w-md text-sm ${className}`}
+          className={`z-10 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg shadow-lg text-sm ${className}`}
           {...getFloatingProps()}
         >
-          <p className="text-blue-800">
+          <p className="text-blue-800 whitespace-pre-line word-break break-all overflow-wrap break-word">
             <strong>AI 提示：</strong>
             {content}
           </p>
