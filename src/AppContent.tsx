@@ -947,14 +947,14 @@ const AppContent: React.FC = () => {
                         {tocItems.map((item) => (
                           <li
                             key={item.id}
-                            className={`py-1.5 px-3 rounded cursor-pointer hover:bg-blue-50 transition-colors ${
+                            className={`py-1.5 px-3 rounded-md cursor-pointer transition-all duration-200 ${
                               item.level === 1
-                                ? "pl-3 font-bold text-gray-800"
+                                ? "pl-3 font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500 shadow-sm"
                                 : item.level === 2
-                                ? "pl-5 text-gray-700"
+                                ? "pl-5 text-gray-800 hover:bg-blue-50 hover:text-blue-700"
                                 : item.level === 3
-                                ? "pl-7 text-gray-600"
-                                : "pl-9 text-gray-500"
+                                ? "pl-7 text-gray-600 hover:bg-gray-100"
+                                : "pl-9 text-gray-500 hover:bg-gray-100"
                             }`}
                             onClick={() => scrollToHeading(item.id)}
                           >
