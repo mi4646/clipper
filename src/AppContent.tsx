@@ -19,6 +19,13 @@ interface Resource {
   category: string;
 }
 
+// --- AI 设置类型定义 ---
+interface AISettings {
+  model: string;
+  apiUrl: string;
+  apiKey: string;
+}
+
 // --- 模拟 Tauri 命令的函数 (纯前端实现) ---
 const mockReadKb = (): Promise<string> => {
   const stored = localStorage.getItem("clipper_kb_content");
@@ -62,22 +69,19 @@ const mockAddCategory = (name: string): Promise<void> => {
 
 // --- 生成单个资源的 Markdown 片段 ---
 const generateMarkdownForResource = (resource: Resource): string => {
-  // 注意：这里 resource.website 和 resource.github 现在已经是完整URL
-  return `### ${resource.title}\n- ${resource.summary} 🔗 [官网](${
-    resource.website
-  }) ｜ [GitHub](${resource.github || resource.website})`;
+  return `### ${resource.title}
+- ${resource.summary} 🔗 [官网](${resource.website}) ｜ [GitHub](${
+    resource.github || resource.website
+  })`;
 };
 
 // --- 子组件：AppContent，实际的业务逻辑 ---
 const AppContent: React.FC = () => {
   const [aiGenerating, setAiGenerating] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
-
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [newCategory, setNewCategory] = useState<string>("");
-
-  // 修改 resourceInput 类型注解，website 和 github 现在只存域名
   const [resourceInput, setResourceInput] = useState<Resource>({
     title: "",
     summary: "",
@@ -85,16 +89,13 @@ const AppContent: React.FC = () => {
     github: "", // 存储域名部分
     category: "",
   });
-
   const [loading, setLoading] = useState<boolean>(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const isInitialScrollRef = useRef(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { success, error, dismiss } = useToast();
-
   const [loadingRemote, setLoadingRemote] = useState<boolean>(false);
   const [mainContent, setMainContent] = useState<string>(""); // 存储从本地或远程获取的主内容
-
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isTocOpen, setIsTocOpen] = useState(true); // 控制目录显示
   const [tocItems, setTocItems] = useState<
@@ -102,6 +103,15 @@ const AppContent: React.FC = () => {
   >([]); // 目录项
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const tocRef = useRef<HTMLDivElement>(null);
+
+  // --- AI 设置状态 ---
+  const [isAISettingsModalOpen, setIsAISettingsModalOpen] = useState(false);
+  const [aiSettings, setAiSettings] = useState<AISettings>({
+    model: localStorage.getItem("ai_model") || "gemini-2.0-flash", // 默认值
+    apiUrl:
+      localStorage.getItem("ai_api_url") || "/xiangcao/v1/chat/completions", // 默认值
+    apiKey: localStorage.getItem("ai_api_key") || "", // 不设置默认值
+  });
 
   // 协议选择 state
   const [websiteProtocol, setWebsiteProtocol] = useState<string>("https://");
@@ -126,52 +136,39 @@ const AppContent: React.FC = () => {
     if (!owner || !repo) {
       throw new Error("GitHub owner 和 repo 不能为空");
     }
-
-    // 1. 生成缓存键
     const cacheKey = generateCacheKey(owner, repo);
-
-    // 2. 检查缓存是否存在且未过期 (例如 10 分钟过期时间)
     const cacheEntry = localStorage.getItem(cacheKey);
     if (cacheEntry) {
       try {
         const { content, timestamp } = JSON.parse(cacheEntry);
         const now = new Date().getTime();
         const cacheDuration = 10 * 60 * 1000; // 10分钟，单位毫秒
-
         if (now - timestamp < cacheDuration) {
           console.log(`从缓存加载 ${owner}/${repo} 的 README.md`);
           return content;
         } else {
           console.log(`缓存已过期，将从 ${owner}/${repo} 重新获取 README.md`);
-          // 缓存过期，删除旧缓存
           localStorage.removeItem(cacheKey);
         }
       } catch (e) {
         console.warn("缓存数据解析失败，将重新获取", e);
-        // 解析失败，删除损坏的缓存
         localStorage.removeItem(cacheKey);
       }
     }
 
-    // 3. 缓存未命中或已过期，执行 API 调用
     console.log(`从 GitHub API 获取 ${owner}/${repo} 的 README.md`);
-
     const token = localStorage.getItem("github_token");
     if (!token) {
       throw new Error("GitHub Token 未设置，请先连接 GitHub。");
     }
-
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/README.md`;
-
     const headers: HeadersInit = {
       Accept: "application/vnd.github.v3+json",
     };
     headers["Authorization"] = `Bearer ${token}`;
-
     const response = await fetch(apiUrl, {
       headers,
     });
-
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(`在仓库 ${owner}/${repo} 中未找到 README.md 文件。`);
@@ -185,27 +182,22 @@ const AppContent: React.FC = () => {
         );
       }
     }
-
     const data = await response.json();
     const base64Content = data.content;
-
     const binaryString = atob(base64Content);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-
     const decoder = new TextDecoder("utf-8");
     const content = decoder.decode(bytes);
 
-    // 4. API 调用成功后，将结果写入缓存
     const cacheData = {
       content: content,
       timestamp: new Date().getTime(), // 存储当前时间戳
     };
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
     console.log(`已缓存 ${owner}/${repo} 的 README.md`);
-
     return content;
   };
 
@@ -217,14 +209,11 @@ const AppContent: React.FC = () => {
           mockReadKb(),
           mockGetCategories(),
         ]);
-
         let cleanKbContent = kbContent.trim();
         if (!cleanKbContent.startsWith("# 知识库")) {
-          cleanKbContent = "# 知识库\n\n" + cleanKbContent;
+          cleanKbContent = "# 知识库\n" + cleanKbContent;
         }
-        // setKbContent(cleanKbContent); // 不再需要原始 kbContent，用 mainContent 替代
         setCategories(categories);
-
         if (categories.length > 0) {
           const defaultCategory = categories[0];
           setSelectedCategory(defaultCategory);
@@ -237,20 +226,17 @@ const AppContent: React.FC = () => {
         setLoading(false);
       }
     };
-
     initializeData();
   }, [error]);
 
   // --- 新增 useEffect：根据设置加载主内容 (本地或远程) ---
   useEffect(() => {
     const loadMainContent = async () => {
-      if (loading) return; // 等待初始化完成
+      if (loading) return;
       setLoadingRemote(true);
       try {
-        // 直接从 localStorage 读取配置
         const savedOwner = localStorage.getItem("github_owner") || "";
         const savedRepo = localStorage.getItem("github_repo") || "";
-
         let content = "";
         if (savedOwner && savedRepo) {
           console.log("正在从 GitHub 获取内容...");
@@ -260,7 +246,7 @@ const AppContent: React.FC = () => {
           const stored = localStorage.getItem("clipper_kb_content");
           let cleanContent = (stored || "").trim();
           if (!cleanContent.startsWith("# 知识库")) {
-            cleanContent = "# 知识库\n\n" + cleanContent;
+            cleanContent = "# 知识库\n" + cleanContent;
           }
           content = cleanContent;
         }
@@ -268,20 +254,18 @@ const AppContent: React.FC = () => {
       } catch (err) {
         console.error("获取主内容失败:", err);
         error(`获取主内容失败: ${(err as Error).message}`);
-        // 回退到本地内容
         const stored = localStorage.getItem("clipper_kb_content");
         let cleanContent = (stored || "").trim();
         if (!cleanContent.startsWith("# 知识库")) {
-          cleanContent = "# 知识库\n\n" + cleanContent;
+          cleanContent = "# 知识库\n" + cleanContent;
         }
         setMainContent(cleanContent);
       } finally {
         setLoadingRemote(false);
       }
     };
-
     loadMainContent();
-  }, [loading, error]); // 移除了 githubOwner, githubRepo, useRemoteContent
+  }, [loading, error]);
 
   // --- 新增 useEffect：处理外部点击关闭下拉菜单 ---
   useEffect(() => {
@@ -293,7 +277,6 @@ const AppContent: React.FC = () => {
         setIsDropdownOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -316,7 +299,6 @@ const AppContent: React.FC = () => {
         const targetElement = h2Elements.find(
           (el) => el.textContent?.trim() === selectedCategory
         );
-
         if (targetElement) {
           targetElement.scrollIntoView({
             behavior: "smooth",
@@ -325,7 +307,6 @@ const AppContent: React.FC = () => {
           isInitialScrollRef.current = false;
         }
       }, 100);
-
       return () => clearTimeout(timer);
     }
   }, [loading, loadingRemote, selectedCategory]);
@@ -335,7 +316,7 @@ const AppContent: React.FC = () => {
     if (
       resourceInput.title &&
       resourceInput.summary &&
-      resourceInput.website && // 这里是域名部分
+      resourceInput.website &&
       selectedCategory &&
       previewContainerRef.current &&
       !isInitialScrollRef.current
@@ -347,7 +328,6 @@ const AppContent: React.FC = () => {
         const targetElement = h3Elements.find(
           (el) => el.textContent?.trim() === resourceInput.title
         );
-
         if (targetElement) {
           targetElement.scrollIntoView({
             behavior: "smooth",
@@ -358,36 +338,43 @@ const AppContent: React.FC = () => {
     }
   }, [resourceInput, selectedCategory]);
 
+  // --- 处理 AI 设置输入变化 ---
+  const handleAISettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setAiSettings((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // --- 保存 AI 设置 ---
+  const saveAISettings = () => {
+    // 保存到 localStorage
+    localStorage.setItem("ai_model", aiSettings.model);
+    localStorage.setItem("ai_api_url", aiSettings.apiUrl);
+    localStorage.setItem("ai_api_key", aiSettings.apiKey); // 注意：生产环境应更安全地存储
+    // 可选：显示保存成功的提示
+    success("AI 设置已保存！");
+    setIsAISettingsModalOpen(false); // 关闭模态框
+  };
+
   // --- 修改 handleInputChange 函数 ---
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    let processedValue = value; // 初始化处理后的值为原始值
-
-    // 对于 websiteDomain 和 githubDomain，我们只更新 resourceInput 中的域名部分
+    let processedValue = value;
     if (name === "websiteDomain" || name === "githubDomain") {
       if (name === "websiteDomain") {
-        // 清理网站域名输入
-        // 移除常见的协议前缀
         processedValue = processedValue.replace(/^(https?:\/\/)/i, "").trim();
       } else if (name === "githubDomain") {
-        // 清理 GitHub 地址输入
-        // 移除 'https://github.com/' 前缀（不区分大小写）
         processedValue = processedValue
           .replace(/^https:\/\/github\.com\//i, "")
           .trim();
-        // 还可以进一步移除协议，以防用户粘贴了没有 github.com 但有协议的链接
         processedValue = processedValue.replace(/^(https?:\/\/)/i, "").trim();
       }
-
-      // 将处理后的值（不包含协议或前缀）设置到状态中
       setResourceInput((prev) => ({
         ...prev,
         [name === "websiteDomain" ? "website" : "github"]: processedValue,
       }));
     } else {
-      // 其他字段照常处理
       setResourceInput((prev) => ({ ...prev, [name]: value }));
     }
   };
@@ -396,7 +383,6 @@ const AppContent: React.FC = () => {
     setSelectedCategory(category);
     setResourceInput((prev) => ({ ...prev, category }));
     setIsDropdownOpen(false);
-
     if (previewContainerRef.current) {
       requestAnimationFrame(() => {
         const h2Elements = Array.from(
@@ -405,7 +391,6 @@ const AppContent: React.FC = () => {
         const targetElement = h2Elements.find(
           (el) => el.textContent?.trim() === category
         );
-
         if (targetElement) {
           targetElement.scrollIntoView({
             behavior: "smooth",
@@ -419,39 +404,32 @@ const AppContent: React.FC = () => {
   // --- 修改 handleAddResource 函数 ---
   const handleAddResource = async () => {
     dismiss();
-
     if (
       !resourceInput.title ||
       !resourceInput.summary ||
-      !resourceInput.website || // 这里是域名部分，不是完整URL
+      !resourceInput.website ||
       !selectedCategory
     ) {
       error("请填写所有必填项（标题、说明、官网、分类）。");
       return;
     }
-
     try {
-      // --- 在生成 Markdown 之前，拼接完整的 URL ---
-      // 拼接官网地址
       const fullWebsiteUrl = `${websiteProtocol}${resourceInput.website}`;
-      // 拼接 GitHub 地址 (如果存在)
       const fullGithubUrl = resourceInput.github
         ? `https://github.com/${resourceInput.github}`
         : "";
 
       const newResourceMarkdown = generateMarkdownForResource({
         ...resourceInput,
-        website: fullWebsiteUrl, // 使用拼接后的完整 URL
-        github: fullGithubUrl, // 使用拼接后的完整 URL
+        website: fullWebsiteUrl,
+        github: fullGithubUrl,
         category: selectedCategory,
       });
 
-      // 使用 mainContent 作为基础进行更新
       let updatedContent = mainContent;
       const categoryHeader = `## ${selectedCategory}`;
-
       if (!updatedContent.includes(categoryHeader)) {
-        updatedContent += `\n\n${categoryHeader}\n\n${newResourceMarkdown}`;
+        updatedContent += `\n${categoryHeader}\n${newResourceMarkdown}`;
       } else {
         const categoryIndex = updatedContent.indexOf(categoryHeader);
         const afterCategoryIndex = updatedContent.indexOf(
@@ -466,27 +444,23 @@ const AppContent: React.FC = () => {
         }
         updatedContent =
           updatedContent.substring(0, insertIndex) +
-          `\n\n${newResourceMarkdown}` +
+          `\n${newResourceMarkdown}` +
           updatedContent.substring(insertIndex);
       }
+      updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n");
 
-      updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
-
-      // 从 localStorage 读取 useRemoteContent 设置
       await mockWriteKb(updatedContent);
-      // 无论是否使用远程内容，都更新 mainContent 状态以刷新预览
       setMainContent(updatedContent);
       success("资源已添加到知识库！");
 
-      // 清空输入框和协议选择
       setResourceInput({
         title: "",
         summary: "",
-        website: "", // 清空域名部分
-        github: "", // 清空域名部分
+        website: "",
+        github: "",
         category: selectedCategory,
       });
-      setWebsiteProtocol("https://"); // 重置协议为默认值
+      setWebsiteProtocol("https://");
     } catch (err) {
       console.error("添加资源失败:", err);
       error("添加资源失败，请检查控制台。");
@@ -527,18 +501,15 @@ const AppContent: React.FC = () => {
       const token = localStorage.getItem("github_token");
       const owner = localStorage.getItem("github_owner");
       const repo = localStorage.getItem("github_repo");
-
       if (!token || !owner || !repo) {
         error("GitHub 配置不完整，请先连接 GitHub。");
         return;
       }
 
-      // 获取文件内容（使用 mainContent）
-      const fileContent = mainContent; // 使用当前编辑的内容
-      const fileName = "README.md"; // 固定文件名，或从其他地方获取
+      const fileContent = mainContent;
+      const fileName = "README.md";
       const commitMessage = `Update knowledge base - ${new Date().toISOString()}`;
 
-      // 1. 获取远程文件的 SHA (如果存在)
       const getContentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`;
       const getContentResponse = await fetch(getContentUrl, {
         headers: {
@@ -546,34 +517,28 @@ const AppContent: React.FC = () => {
           Accept: "application/vnd.github.v3+json",
         },
       });
-
       let sha = null;
       if (getContentResponse.ok) {
         const getContentData = await getContentResponse.json();
-        sha = getContentData.sha; // 获取现有文件的 SHA
+        sha = getContentData.sha;
       } else if (getContentResponse.status !== 404) {
-        // 如果不是 404（文件不存在），则抛出错误
-        const errorData = await getContentResponse.json().catch(() => ({})); // 尝试解析错误信息
+        const errorData = await getContentResponse.json().catch(() => ({}));
         throw new Error(
           `获取远程文件信息失败: ${getContentResponse.status} - ${
             errorData.message || getContentResponse.statusText
           }`
         );
       }
-      // 如果是 404，则 sha 保持为 null，表示文件不存在，将创建新文件
 
-      // 2. 将内容编码为 base64
       const contentBytes = new TextEncoder().encode(fileContent);
       const contentBase64 = btoa(String.fromCharCode(...contentBytes));
 
-      // 3. 准备请求体
       const body = {
         message: commitMessage,
         content: contentBase64,
-        ...(sha && { sha }), // 如果 SHA 存在，则包含在请求体中（用于更新）
+        ...(sha && { sha }),
       };
 
-      // 4. 上传或更新文件
       const putContentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`;
       const putResponse = await fetch(putContentUrl, {
         method: "PUT",
@@ -586,9 +551,8 @@ const AppContent: React.FC = () => {
       });
 
       if (!putResponse.ok) {
-        const errorData = await putResponse.json().catch(() => ({})); // 尝试解析错误信息
+        const errorData = await putResponse.json().catch(() => ({}));
         if (putResponse.status === 403) {
-          // 特别处理 403 错误
           throw new Error(
             `GitHub API 403 错误: ${
               errorData.message || putResponse.statusText
@@ -602,15 +566,12 @@ const AppContent: React.FC = () => {
           );
         }
       }
-
       const putData = await putResponse.json();
       console.log("同步成功:", putData);
 
-      // 同步成功后，清理对应仓库的缓存
       if (owner && repo) {
         clearCacheForRepo(owner, repo);
       }
-
       success("已成功同步到 GitHub!");
     } catch (err) {
       console.error("同步到 GitHub 失败:", err);
@@ -621,7 +582,7 @@ const AppContent: React.FC = () => {
   const handleDownload = () => {
     const blob = new Blob([mainContent], {
       type: "text/markdown;charset=utf-8",
-    }); // 使用 mainContent
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -644,7 +605,6 @@ const AppContent: React.FC = () => {
   // 修改打开全屏预览的函数
   const openFullscreenModal = () => {
     setIsPreviewModalOpen(true);
-    // 更新URL参数
     const urlParams = new URLSearchParams(window.location.search);
     urlParams.set("fullscreen", "true");
     window.history.replaceState(
@@ -657,7 +617,6 @@ const AppContent: React.FC = () => {
   // 修改关闭全屏预览的函数
   const closeFullscreenModal = () => {
     setIsPreviewModalOpen(false);
-    // 移除URL参数
     const urlParams = new URLSearchParams(window.location.search);
     urlParams.delete("fullscreen");
     window.history.replaceState(
@@ -674,17 +633,13 @@ const AppContent: React.FC = () => {
     if (loading || loadingRemote) {
       return loadingRemote ? "正在加载远程内容..." : "";
     }
-
-    let baseContent = mainContent; // 使用 mainContent 作为基础
-
-    // 在 baseContent 上叠加本地预览
+    let baseContent = mainContent;
     if (
       resourceInput.title ||
       resourceInput.summary ||
-      resourceInput.website || // 这里是域名部分
-      resourceInput.github // 这里是域名部分
+      resourceInput.website ||
+      resourceInput.github
     ) {
-      // --- 修改：在预览时也拼接完整的 URL ---
       const fullWebsiteUrl = resourceInput.website
         ? `${websiteProtocol}${resourceInput.website}`
         : "https://example.com";
@@ -695,17 +650,15 @@ const AppContent: React.FC = () => {
       const previewResource = {
         title: resourceInput.title || "(待填写标题)",
         summary: resourceInput.summary || "(待填写说明)",
-        website: fullWebsiteUrl, // 使用拼接后的完整 URL
-        github: fullGithubUrl, // 使用拼接后的完整 URL
+        website: fullWebsiteUrl,
+        github: fullGithubUrl,
         category: selectedCategory,
       };
-
       const newResourceMarkdown = generateMarkdownForResource(previewResource);
       const categoryHeader = `## ${selectedCategory}`;
-
       let updatedContent = baseContent;
       if (!updatedContent.includes(categoryHeader)) {
-        updatedContent += `\n\n${categoryHeader}\n\n${newResourceMarkdown}`;
+        updatedContent += `\n${categoryHeader}\n${newResourceMarkdown}`;
       } else {
         const categoryIndex = updatedContent.indexOf(categoryHeader);
         const afterCategoryIndex = updatedContent.indexOf(
@@ -720,14 +673,12 @@ const AppContent: React.FC = () => {
         }
         updatedContent =
           updatedContent.substring(0, insertIndex) +
-          `\n\n${newResourceMarkdown}` +
+          `\n${newResourceMarkdown}` +
           updatedContent.substring(insertIndex);
       }
-
-      updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n\n");
+      updatedContent = updatedContent.trim().replace(/\n{3,}/g, "\n");
       baseContent = updatedContent;
     }
-
     return baseContent;
   }, [
     mainContent,
@@ -738,7 +689,6 @@ const AppContent: React.FC = () => {
     websiteProtocol,
   ]);
 
-  // 从 localStorage 读取当前的 useRemoteContent 设置，用于 UI 显示
   const currentUseRemoteContent =
     localStorage.getItem("use_remote_content") === "true";
 
@@ -748,38 +698,25 @@ const AppContent: React.FC = () => {
     const headings = previewContainerRef.current.querySelectorAll(
       "h1, h2, h3, h4, h5, h6"
     );
-
-    // 首先生成基础的 TOC 项
     let items = Array.from(headings).map((heading) => {
       const text = heading.textContent || "";
-
-      // 使用文本的 MD5 值作为 ID
       const id = `h-${md5(text.trim()).toString()}`;
-
-      // 注意：这里先不设置 heading.id，等确保唯一性后再设置
       return { id, text, level: parseInt(heading.tagName.charAt(1)) };
     });
 
-    // 确保 ID 的唯一性 (虽然 MD5 基本唯一，但为了绝对安全仍检查)
     const idCount = new Map<string, number>();
     const uniqueItems = items.map((item) => {
       let newId = item.id;
       let count = idCount.get(newId) || 0;
-
-      // 如果 ID 已存在，追加计数后缀
       while (idCount.has(newId) && idCount.get(newId)! > 0) {
         count++;
         newId = `${item.id}-${count}`;
       }
-
-      // 更新计数
-      idCount.set(newId, 0); // 新的唯一 ID 计数设为 0
+      idCount.set(newId, 0);
       return { ...item, id: newId };
     });
-
     items = uniqueItems;
 
-    // 现在设置 DOM 元素的 ID
     items.forEach((item, index) => {
       const heading = headings[index];
       if (heading) {
@@ -802,7 +739,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // 在预览内容更新后生成目录（保持不变）
+  // 在预览内容更新后生成目录
   useEffect(() => {
     if (isPreviewModalOpen) {
       const timer = setTimeout(() => {
@@ -812,29 +749,25 @@ const AppContent: React.FC = () => {
     }
   }, [isPreviewModalOpen, previewMarkdown, generateToc]);
 
+  // --- 修改 generateAISummary 函数 ---
   const generateAISummary = async (title: string, url: string) => {
     if (!title || !url) {
       setAiError("请先填写标题和地址。");
       return;
     }
-
     setAiGenerating(true);
     setAiError(null);
-
     try {
-      // 1. 获取补充信息 (示例：仅处理 GitHub)
       let additionalInfo = "";
       const githubMatch = url.match(/github\.com\/([^\/]+)\/([^\/]+)/i);
       if (githubMatch) {
         const [_, owner, repo] = githubMatch;
         try {
-          // 调用 GitHub API 获取仓库描述
-          const token = localStorage.getItem("github_token"); // 需要 GitHub Token
+          const token = localStorage.getItem("github_token");
           const headers: HeadersInit = {
             Accept: "application/vnd.github.v3+json",
           };
           if (token) headers["Authorization"] = `Bearer ${token}`;
-
           const response = await fetch(
             `https://api.github.com/repos/${owner}/${repo}`,
             { headers }
@@ -848,34 +781,33 @@ const AppContent: React.FC = () => {
             console.warn(
               `Failed to fetch repo info: ${response.status} ${response.statusText}`
             );
-            // 如果 API 失败，不中断 AI 调用，仅记录
           }
         } catch (err) {
           console.error("Error fetching GitHub repo info:", err);
-          // 如果获取失败，不中断 AI 调用，仅记录
         }
       }
 
-      // 2. 构建 Prompt
       const prompt = `根据以下信息，生成一段简洁、准确的中文说明文字（100字以内）。标题: "${title}", URL: "${url}".${additionalInfo} 说明:`;
 
-      // 3. 调用 AI API (示例使用 OpenAI)
-      const apiKey = localStorage.getItem("openai_api_key") || "";
+      // 使用状态中的 AI 设置
+      const { model, apiUrl, apiKey } = aiSettings;
+
       if (!apiKey) {
-        throw new Error("OpenAI API Key 未设置。请在设置中配置。");
+        throw new Error("AI API Key 未设置。请在 AI 设置中配置。");
       }
 
-      const aiResponse = await fetch("/xiangcao/v1/chat/completions", {
+      // 注意：这里使用的是状态中的 apiUrl 和 model
+      const aiResponse = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gemini-2.0-flash", // 或其他模型
+          model: model,
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 100, // 限制输出长度
-          temperature: 0.3, // 控制随机性
+          max_tokens: 100,
+          temperature: 0.3,
         }),
       });
 
@@ -887,11 +819,9 @@ const AppContent: React.FC = () => {
           }`
         );
       }
-
       const data = await aiResponse.json();
       const generatedSummary = data.choices[0].message.content.trim();
 
-      // 4. 更新说明字段
       setResourceInput((prev) => ({ ...prev, summary: generatedSummary }));
       success("AI 说明已生成！");
     } catch (err) {
@@ -914,13 +844,41 @@ const AppContent: React.FC = () => {
           <p className="mt-1 text-sm text-gray-600 text-center">
             你的智能个人知识库 — 一键收藏，随时查阅 .
           </p>
-          {/* --- 新增：显示当前连接的仓库信息 --- */}
           {currentUseRemoteContent && (
             <div className="mt-1 text-xs text-gray-500 text-center">
               当前连接: {localStorage.getItem("github_owner")}/
               {localStorage.getItem("github_repo")}
             </div>
           )}
+          {/* --- 新增：AI 设置按钮 --- */}
+          <div className="mt-2 text-center">
+            <button
+              onClick={() => setIsAISettingsModalOpen(true)}
+              className="inline-flex items-center px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors border border-gray-300"
+            >
+              <svg
+                className="w-4 h-4 mr-1"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+              AI 设置
+            </button>
+          </div>
         </div>
       </header>
 
@@ -947,15 +905,11 @@ const AppContent: React.FC = () => {
                   placeholder="例如：MarkFlowy"
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   说明 * (必填)
                 </label>
                 <div className="relative">
-                  {" "}
-                  {/* 使用相对定位容器 */}
-                  {/* 说明输入框 - 添加 padding-right 为按钮留出空间 */}
                   <textarea
                     name="summary"
                     value={resourceInput.summary}
@@ -964,10 +918,7 @@ const AppContent: React.FC = () => {
                     rows={3}
                     placeholder="例如：轻快纯粹的跨平台 Markdown 编辑器，内置 AI 辅助..."
                   />
-                  {/* AI 补充说明按钮和提示图标 - 绝对定位到 textarea 右下角 */}
                   <div className="absolute bottom-1 right-1 flex items-center space-x-1">
-                    {" "}
-                    {/* 关键修改：使用 absolute 定位，并调整内边距 */}
                     <button
                       onClick={() =>
                         generateAISummary(
@@ -990,26 +941,22 @@ const AppContent: React.FC = () => {
                     >
                       {aiGenerating ? "AI 生成中..." : "AI 补充说明"}
                     </button>
-                    {/* 使用封装的 AiTip 组件 */}
                     <AiTip
                       title="AI 提示"
                       content="调用可能产生费用，请注意控制频率。生成内容仅供参考，可能需要微调。"
                     />
                   </div>
-                  {/* 错误信息显示在按钮下方 */}
                   {aiError && (
                     <p className="text-xs text-red-500 mt-1 ml-2">{aiError}</p>
                   )}
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-2">
                     官网地址 * (必填)
                   </label>
                   <div className="flex">
-                    {/* 协议选择下拉框 */}
                     <select
                       value={websiteProtocol}
                       onChange={(e) => setWebsiteProtocol(e.target.value)}
@@ -1018,19 +965,16 @@ const AppContent: React.FC = () => {
                       <option value="https://">https://</option>
                       <option value="http://">http://</option>
                     </select>
-                    {/* 域名输入框 */}
                     <input
-                      type="text" // 注意：这里类型改为 text，因为用户只需要输入域名
-                      name="websiteDomain" // 名称改为 websiteDomain，以区分协议
-                      value={resourceInput.website} // 绑定到 resourceInput.website，但只代表域名部分
+                      type="text"
+                      name="websiteDomain"
+                      value={resourceInput.website}
                       onChange={handleInputChange}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       placeholder="example.com"
                     />
                   </div>
                 </div>
-
-                {/* --- 修改：GitHub 地址输入 --- */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-2">
                     GitHub 地址 (可选)
@@ -1041,22 +985,20 @@ const AppContent: React.FC = () => {
                     </span>
                     <input
                       type="text"
-                      name="githubDomain" // 名称保持不变，但含义是 owner/repo
-                      value={resourceInput.github} // 绑定到 resourceInput.github，代表 owner/repo 部分
+                      name="githubDomain"
+                      value={resourceInput.github}
                       onChange={handleInputChange}
                       className="flex-1 px-3 py-2 border border-l-0 border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="owner/repo" // 修改 placeholder
+                      placeholder="owner/repo"
                     />
                   </div>
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-900 mb-2">
                   分类 * (必选)
                 </label>
                 <div className="flex space-x-2">
-                  {/* **自定义下拉菜单 - 添加 ref** */}
                   <div ref={dropdownRef} className="relative w-64 max-w-full">
                     <button
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -1073,7 +1015,6 @@ const AppContent: React.FC = () => {
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                       </svg>
                     </button>
-
                     {isDropdownOpen && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {categories.map((cat) => (
@@ -1090,8 +1031,6 @@ const AppContent: React.FC = () => {
                       </div>
                     )}
                   </div>
-
-                  {/* **新分类输入框 + 附加按钮** */}
                   <div className="flex-1 flex">
                     <input
                       type="text"
@@ -1109,8 +1048,6 @@ const AppContent: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* 操作按钮组 */}
               <div className="flex space-x-2 pt-4">
                 <button
                   onClick={handleAddResource}
@@ -1127,7 +1064,6 @@ const AppContent: React.FC = () => {
               </div>
             </div>
           </div>
-
           {/* 右侧：实时预览区 */}
           <div className="lg:w-1/2 bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
             <div className="flex justify-between items-center mb-5">
@@ -1147,13 +1083,10 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
             </div>
-
-            {/* 预览内容区域 - 占据剩余空间并启用滚动 */}
             <div
               ref={previewContainerRef}
               className="flex-1 border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-y-auto min-h-0"
             >
-              {/* --- 修改渲染逻辑 --- */}
               {loading || loadingRemote ? (
                 <div className="text-center text-gray-500 py-6">
                   {loadingRemote ? "正在加载远程内容..." : "加载中..."}
@@ -1165,22 +1098,103 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       </div>
-
       {/* Footer 底部 */}
       <footer className="text-center text-xs text-gray-500 py-3 border-t border-gray-200 bg-white">
         Clipper — 为思想留光。{" "}
         <span className="text-gray-400">© {new Date().getFullYear()}</span>
       </footer>
 
-      {/* 模态框 */}
+      {/* --- 新增：AI 设置模态框 --- */}
+      {isAISettingsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">AI 设置</h3>
+              <button
+                onClick={() => setIsAISettingsModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  模型名称
+                </label>
+                <input
+                  type="text"
+                  name="model"
+                  value={aiSettings.model}
+                  onChange={handleAISettingsChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="例如: gemini-2.0-flash"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  API 地址
+                </label>
+                <input
+                  type="text"
+                  name="apiUrl"
+                  value={aiSettings.apiUrl}
+                  onChange={handleAISettingsChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="例如: https://api.example.com/v1/chat/completions"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  name="apiKey"
+                  value={aiSettings.apiKey}
+                  onChange={handleAISettingsChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="输入您的 API Key"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => setIsAISettingsModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={saveAISettings}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 模态框 (保持原有) */}
       {isPreviewModalOpen && (
         <div className="fixed inset-0 z-50 flex bg-black bg-opacity-50">
-          {/* 主容器 - 使用相对定位 */}
           <div className="flex flex-col w-full h-full relative">
-            {/* 顶部控制栏 */}
             <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white shadow-sm z-10">
               <div className="flex items-center space-x-4">
-                {/* 优化后的目录切换按钮 - 精确对齐 */}
                 <button
                   onClick={() => setIsTocOpen(!isTocOpen)}
                   className="text-gray-700 hover:text-blue-600 w-10 h-10 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center"
@@ -1214,10 +1228,7 @@ const AppContent: React.FC = () => {
                 ×
               </button>
             </div>
-
-            {/* 中间内容区域 - 使用相对定位 */}
             <div className="flex-1 overflow-hidden relative">
-              {/* 内容区域 */}
               <div
                 ref={previewContainerRef}
                 className={`h-full overflow-y-auto bg-gray-50 ${
@@ -1234,25 +1245,20 @@ const AppContent: React.FC = () => {
                   )}
                 </div>
               </div>
-
-              {/* 右侧目录区域 - 使用绝对定位 */}
               {isTocOpen && (
                 <div
                   ref={tocRef}
                   className="absolute right-0 top-0 h-full w-80 bg-white border-l border-gray-200 overflow-y-auto shadow-lg z-0"
                 >
-                  {/* 目录标题 */}
                   <div className="p-4 border-b border-gray-200 bg-gray-50">
                     <h4 className="font-bold text-gray-800">目录</h4>
                   </div>
-
-                  {/* 目录内容 */}
                   <div className="p-2">
                     {tocItems.length > 0 ? (
                       <ul className="space-y-1">
                         {tocItems.map((item) => (
                           <li
-                            key={item.id} // 现在 ID 是基于内容的 MD5，保证唯一
+                            key={item.id}
                             className={`py-1.5 px-3 rounded-md cursor-pointer transition-all duration-200 ${
                               item.level === 1
                                 ? "pl-3 font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500 shadow-sm"
@@ -1275,8 +1281,6 @@ const AppContent: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {/* 底部操作栏 */}
             <div className="p-4 border-t border-gray-200 bg-white z-10">
               <button
                 onClick={handleDownload}
