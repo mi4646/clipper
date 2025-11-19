@@ -1,5 +1,6 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
 import "../assets/css/typora-style.css";
 
@@ -18,13 +19,30 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ children }) => {
           a: ({ node, ...props }) => (
             <a {...props} target="_blank" rel="noopener noreferrer" />
           ),
-          code: ({ inline, className, children, ...props }) => {
-            return inline ? (
-              <code {...props}>{children}</code>
-            ) : (
-              <pre>
-                <code {...props}>{children}</code>
-              </pre>
+          code({ inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || "");
+
+            if (inline || !match) {
+              return (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
+
+            const language = match?.[1];
+            if (!language) {
+              return (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
+
+            return (
+              <SyntaxHighlighter language={language} PreTag="div" {...props}>
+                {String(children).replace(/\n$/, "")}
+              </SyntaxHighlighter>
             );
           },
           // 修复无序列表 - 显式设置 list-style

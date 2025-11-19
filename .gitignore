@@ -28,3 +28,20 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+
+
+# Tauri (Rust-related)
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/.cargo/
+src-tauri/bundle/
+
+# Tauri icons
+src-tauri/icons/*.ico
+src-tauri/icons/*.png
+
+# Rust global target folder (if accidentally created at root)
+target/
+
+# Optional: release build output
+/release/

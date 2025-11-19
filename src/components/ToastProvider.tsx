@@ -1,5 +1,5 @@
 // src/components/ToastProvider.tsx
-import React, { createContext, ReactNode, useContext } from "react";
+import React, { createContext, type ReactNode, useContext } from "react";
 import toast, { Toaster } from "react-hot-toast"; // 只导入必要的函数和组件
 
 // 定义 Toast 上下文的类型
