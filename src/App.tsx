@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import AppContent from "./AppContent";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import GitHubConnectPage from "./components/GitHubConnectPage";
+import ExitConfirmationModal from "./components/ExitConfirmationModal";
 
 // 验证组件
 const AppWithVerification: React.FC = () => {
@@ -156,6 +157,8 @@ const AppWithVerification: React.FC = () => {
       ) : (
         <GitHubConnectPage onConnect={handleConnectSuccess} />
       )}
+      {/* 退出确认对话框组件 */}
+      <ExitConfirmationModal />
     </>
   );
 };

@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "clipper",
-        "width": 1350,
-        "height": 700,
+        "width": 1401,
+        "height": 805,
         "resizable": true,
         "fullscreen": false,
         "maximized": false,
@@ -35,21 +35,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "targets": ["nsis"],
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "",
-      "webviewInstallMode": {
-        "type": "embedBootstrapper"
-      },
-     "nsis": {
-      "displayLanguageSelector": true,
-      "installerIcon": "icons/favicon.ico",
-      "languages": ["SimpChinese", "English"],
-      "installMode": "perMachine",
-      "template": "packages/windows/installer.nsi"
-    }
-  }
+    "targets":"all"
   }
 }

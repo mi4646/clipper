@@ -13,6 +13,7 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.4",
     "@floating-ui/react": "^0.27.16",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.3",
     "crypto-js": "^4.2.0",
     "react": "^19.2.0",
@@ -21,7 +22,8 @@
     "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "sweetalert2": "^11.26.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
