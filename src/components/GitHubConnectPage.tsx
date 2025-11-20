@@ -1,6 +1,7 @@
 // components/GitHubConnectPage.tsx
 import React, { useState } from "react";
 import { SiGithub } from "react-icons/si"; // 导入 Simple Icons 的 GitHub 图标
+import { open } from "@tauri-apps/plugin-shell";
 
 interface GitHubConnectPageProps {
   // onConnect 回调函数现在接收 token, owner, repo 三个参数
@@ -34,11 +35,18 @@ const GitHubConnectPage: React.FC<GitHubConnectPageProps> = ({ onConnect }) => {
     onConnect(token, owner, repo);
   };
 
-  const handleCreateTokenClick = () => {
-    window.open(
-      "https://github.com/settings/personal-access-tokens/new",
-      "_blank"
-    );
+  const handleCreateTokenClick = async () => {
+    try {
+      // const { open } = await import('@tauri-apps/plugin-shell');
+      await open("https://github.com/settings/personal-access-tokens/new");
+    } catch (error) {
+      console.warn("Tauri open 失败，回退到 window.open:", error);
+      // 回退到 window.open
+      window.open(
+        "https://github.com/settings/personal-access-tokens/new",
+        "_blank"
+      );
+    }
   };
 
   return (
