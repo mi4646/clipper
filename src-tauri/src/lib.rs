@@ -1,10 +1,11 @@
-// 导入托盘功能函数
-use crate::core::tray::create_tray;
+// 导入托盘功能函数与窗口事件处理
+use crate::core::{tray::create_tray, window_handler::setup_window_close_handler};
 
 // 声明模块层次结构
 // 告诉编译器在 core 目录下有一个 tray.rs 文件作为模块
 mod core {
-    pub mod tray; // tray 模块被声明为公共的，这样其他模块可以访问
+    pub mod tray;
+    pub mod window_handler;
 }
 
 pub fn run() {
@@ -27,6 +28,9 @@ pub fn run() {
             // 调用我们在 tray.rs 中定义的 create_tray 函数
             // 传入应用句柄，函数会创建系统托盘并将其附加到应用
             create_tray(app.handle())?;
+
+            // 设置窗口关闭事件处理器
+            setup_window_close_handler(app.handle());
 
             Ok(()) // 返回 Ok 表示 setup 成功
         })
