@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import md5 from "crypto-js/md5";
 import AiTip from "./components/AiTip";
+import TocTree from "./components/TocTree";
 import MarkdownRenderer from "./components/MarkdownRenderer";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 
@@ -103,6 +104,9 @@ const AppContent: React.FC = () => {
   >([]); // 目录项
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const tocRef = useRef<HTMLDivElement>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set()); // 记录已展开的父级ID
+  const [selectedItem, setSelectedItem] = useState<string | null>(null); // 记录当前选中的条目ID
+  const [searchQuery, setSearchQuery] = useState<string>(""); // 记录搜索关键词
 
   // --- AI 设置状态 ---
   const [isAISettingsModalOpen, setIsAISettingsModalOpen] = useState(false);
@@ -692,7 +696,32 @@ const AppContent: React.FC = () => {
   const currentUseRemoteContent =
     localStorage.getItem("use_remote_content") === "true";
 
-  // 添加生成目录
+  const buildTocTree = useCallback(
+    (items: { id: string; text: string; level: number }[]) => {
+      if (!items || items.length === 0) return [];
+
+      const tree: any[] = [];
+      let currentParent: any = null;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.level === 2) {
+          // 如果是2级标题，它就是一个父节点
+          currentParent = { ...item, children: [] };
+          tree.push(currentParent);
+        } else if (item.level > 2 && currentParent) {
+          // 如果是3级或更低级别，并且有当前父节点，则将其添加到父节点的children中
+          currentParent.children.push(item);
+        }
+        // 对于1级标题，我们不处理，因为它们不是可折叠的父节点
+      }
+
+      return tree;
+    },
+    []
+  );
+
+  // --- 修改 generateToc 函数，确保ID唯一性 ---
   const generateToc = useCallback(() => {
     if (!previewContainerRef.current) return;
     const headings = previewContainerRef.current.querySelectorAll(
@@ -704,16 +733,18 @@ const AppContent: React.FC = () => {
       return { id, text, level: parseInt(heading.tagName.charAt(1)) };
     });
 
+    // 确保ID唯一性 (处理相同标题的情况)
     const idCount = new Map<string, number>();
     const uniqueItems = items.map((item) => {
-      let newId = item.id;
-      let count = idCount.get(newId) || 0;
-      while (idCount.has(newId) && idCount.get(newId)! > 0) {
-        count++;
-        newId = `${item.id}-${count}`;
+      const baseId = item.id;
+      const currentCount = idCount.get(baseId) || 0;
+      let finalId = baseId;
+      if (currentCount > 0) {
+        // 如果该基础ID已出现过，则生成带计数和时间戳的新ID
+        finalId = `${baseId}-${currentCount}-${Date.now()}`;
       }
-      idCount.set(newId, 0);
-      return { ...item, id: newId };
+      idCount.set(baseId, currentCount + 1);
+      return { ...item, id: finalId };
     });
     items = uniqueItems;
 
@@ -723,6 +754,7 @@ const AppContent: React.FC = () => {
         heading.id = item.id;
       }
     });
+
     console.log("toc items", items);
     setTocItems(items);
   }, [previewMarkdown]);
@@ -1250,30 +1282,55 @@ const AppContent: React.FC = () => {
                   ref={tocRef}
                   className="absolute right-0 top-0 h-full w-80 bg-white border-l border-gray-200 overflow-y-auto shadow-lg z-0"
                 >
+                  {/* 搜索框 */}
                   <div className="p-4 border-b border-gray-200 bg-gray-50">
-                    <h4 className="font-bold text-gray-800">目录</h4>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search headings..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      <svg
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
                   </div>
+
+                  {/* 目录列表 */}
                   <div className="p-2">
                     {tocItems.length > 0 ? (
-                      <ul className="space-y-1">
-                        {tocItems.map((item) => (
-                          <li
-                            key={item.id}
-                            className={`py-1.5 px-3 rounded-md cursor-pointer transition-all duration-200 ${
-                              item.level === 1
-                                ? "pl-3 font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500 shadow-sm"
-                                : item.level === 2
-                                ? "pl-5 text-gray-800 hover:bg-blue-50 hover:text-blue-700"
-                                : item.level === 3
-                                ? "pl-7 text-gray-600 hover:bg-gray-100"
-                                : "pl-9 text-gray-500 hover:bg-gray-100"
-                            }`}
-                            onClick={() => scrollToHeading(item.id)}
-                          >
-                            {item.text}
-                          </li>
-                        ))}
-                      </ul>
+                      <TocTree
+                        nodes={buildTocTree(tocItems)} // 构建目录树
+                        expandedItems={expandedItems}
+                        selectedItem={selectedItem}
+                        onToggleExpand={(id) => {
+                          const newExpanded = new Set(expandedItems);
+                          if (newExpanded.has(id)) {
+                            newExpanded.delete(id);
+                          } else {
+                            newExpanded.add(id);
+                          }
+                          setExpandedItems(newExpanded);
+                        }}
+                        onNodeClick={(id) => {
+                          setSelectedItem(id);
+                          scrollToHeading(id);
+                        }}
+                        searchQuery={searchQuery}
+                      />
                     ) : (
                       <p className="text-gray-400 text-sm p-3">暂无目录项</p>
                     )}
