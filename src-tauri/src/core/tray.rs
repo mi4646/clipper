@@ -20,8 +20,28 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
             match event.id.as_ref() {
                 "quit" => {
                     println!("Quit menu clicked");
-                    // 现在 emit 方法应该可用
-                    let _ = app.emit("exit-requested", ());
+
+                    // 先显示主窗口，确保对话框可以正常显示
+                    match app.get_webview_window("main") {
+                        Some(window) => {
+                            // 显示窗口
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+
+                            // 等待窗口显示完成后再显示对话框
+                            let app_handle = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                                let _ = app_handle.emit("exit-requested", ());
+                            });
+                        }
+                        None => {
+                            println!("Main window not found");
+                            // 如果窗口不存在，直接发送退出事件
+                            let _ = app.emit("exit-requested", ());
+                        }
+                    }
                 }
                 "show" => {
                     println!("Show menu clicked");
