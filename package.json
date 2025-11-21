@@ -13,6 +13,8 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.4",
     "@floating-ui/react": "^0.27.16",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
+    "@tauri-apps/plugin-fs": "^2.4.4",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.3",
     "crypto-js": "^4.2.0",

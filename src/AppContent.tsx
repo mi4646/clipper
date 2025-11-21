@@ -11,6 +11,8 @@ import TocTree from "./components/TocTree";
 import MarkdownRenderer from "./components/MarkdownRenderer";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 
+import { downloadTextFile } from "./utils/fileDownloader";
+
 // --- 类型定义 ---
 interface Resource {
   title: string;
@@ -583,18 +585,19 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([mainContent], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "知识库.md";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownload = async () => {
+    const content = mainContent; // 你的内容
+    const filename = "知识库.md";
+
+    try {
+      await downloadTextFile(content, filename);
+      // 如果 downloadTextFile 成功，这里可以执行后续逻辑
+      console.log("下载操作成功完成");
+    } catch (error) {
+      // 如果 downloadTextFile 失败，这里会捕获错误
+      console.error("下载失败:", error);
+      // 可以在这里显示错误提示给用户
+    }
   };
 
   // 检查URL参数来初始化全屏状态

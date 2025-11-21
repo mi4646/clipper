@@ -8,6 +8,53 @@
   "permissions": [
     "core:default",
     "shell:default",
-    "process:default"
+    "process:default",
+    "fs:default",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ],
+      "deny": [
+        {
+          "path": "/System/**"
+        },
+        {
+          "path": "/usr/**"
+        },
+        {
+          "path": "/etc/**"
+        },
+        {
+          "path": "/bin/**"
+        },
+        {
+          "path": "/sbin/**"
+        },
+        {
+          "path": "/Library/Frameworks/**"
+        },
+        {
+          "path": "/Library/Extensions/**"
+        },
+        {
+          "path": "$HOME/Library/Keychains/**"
+        },
+        {
+          "path": "$HOME/.ssh/**"
+        },
+        {
+          "path": "$HOME/.aws/**"
+        },
+        {
+          "path": "$HOME/.docker/**"
+        }
+      ]
+    },
+    "dialog:default"
   ]
 }

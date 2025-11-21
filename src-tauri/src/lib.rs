@@ -10,6 +10,8 @@ mod core {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init()) // 创建默认的 Tauri 应用构建器
         .plugin(tauri_plugin_shell::init()) // 添加 shell 插件，允许应用与系统 shell 交互
         .setup(|app| {
