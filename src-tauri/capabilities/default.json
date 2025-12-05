@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "shell:default",
+    "dialog:default",
+    "updater:default",
     "process:default",
     "fs:default",
     "fs:allow-write-file",
@@ -54,7 +56,7 @@
           "path": "$HOME/.docker/**"
         }
       ]
-    },
-    "dialog:default"
+    }
+
   ]
 }

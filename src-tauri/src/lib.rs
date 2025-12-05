@@ -14,8 +14,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init()) // 创建默认的 Tauri 应用构建器
         .plugin(tauri_plugin_shell::init()) // 添加 shell 插件，允许应用与系统 shell 交互
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // 设置回调函数，在应用初始化时执行
+            // 设置回调函数，在应用初始化时执行 
             if cfg!(debug_assertions) {
                 // 检查是否为调试模式
                 // 在调试模式下添加日志插件

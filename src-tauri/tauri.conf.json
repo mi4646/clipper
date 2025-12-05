@@ -35,6 +35,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "targets":"all"
+    "targets":"all",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRBNUQ5RjQ3MzcxNzk3QzcKUldUSGx4YzNSNTlkU3UwYXByaHNjdUtKazA1Zk9mcndKRHUzTXgxZTBKRW9HYVhsVks5WDBBbFQK",
+      "endpoints": [
+        "https://github.com/mi4646/clipper/releases/latest/download/latest.json",
+        "http://localhost:5173/update/{{target}}/{{current_version}}"
+      ],
+      "dialog": true
+    }
   }
 }

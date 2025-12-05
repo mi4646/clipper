@@ -27,3 +27,9 @@ tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
+
+# 如果不针对移动设备，可以在 `[dependencies]` 部分添加依赖项。
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-updater = "2.0.0"
+# 或者使用 Git：
+# tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
