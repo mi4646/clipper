@@ -13,6 +13,9 @@ import { ToastProvider, useToast } from "./components/ToastProvider";
 
 import { downloadTextFile } from "./utils/fileDownloader";
 
+
+import { getVersion } from '@tauri-apps/api/app';
+
 // --- 类型定义 ---
 interface Resource {
   title: string;
@@ -80,6 +83,8 @@ const generateMarkdownForResource = (resource: Resource): string => {
 
 // --- 子组件：AppContent，实际的业务逻辑 ---
 const AppContent: React.FC = () => {
+  const [version, setVersion] = useState<string>('Loading...');
+  console.log(version);
   const [aiGenerating, setAiGenerating] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
@@ -122,7 +127,21 @@ const AppContent: React.FC = () => {
   // 协议选择 state
   const [websiteProtocol, setWebsiteProtocol] = useState<string>("https://");
 
-  // 生成缓存键
+  // 获取tauri应用版本
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const ver = await getVersion();
+        setVersion(ver);
+      } catch (err) {
+        console.error('Failed to get app version:', err);
+        setVersion('Unknown');
+      }
+    };
+
+    fetchVersion();
+  }, []); // 只在组件挂载时执行一次
+  //   // 生成缓存键
   const generateCacheKey = (owner: string, repo: string): string => {
     return `github_readme_cache_${owner}_${repo}`;
   };
@@ -1135,8 +1154,9 @@ const AppContent: React.FC = () => {
       </div>
       {/* Footer 底部 */}
       <footer className="text-center text-xs text-gray-500 py-3 border-t border-gray-200 bg-white">
-        Clipper — 为思想留光。{" "}
-        <span className="text-gray-400">© {new Date().getFullYear()}</span>
+        Clipper — 为思想留光。{" "} 
+        <span className="text-gray-400">© {new Date().getFullYear()}</span> {" "}
+        <span className="text-gray-400">版本：{version}</span>
       </footer>
 
       {/* --- 新增：AI 设置模态框 --- */}
